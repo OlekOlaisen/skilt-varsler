@@ -1,8 +1,11 @@
 package no.skiltvarsler.tilesource
 
+import no.skiltvarsler.tiles.Geo
+import no.skiltvarsler.tiles.LatLon
 import no.skiltvarsler.tiles.RoadGraph
 import no.skiltvarsler.tiles.RoadGraphBuilder
 import java.io.File
+import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicReference
 
 object GraphHolder {
@@ -10,6 +13,11 @@ object GraphHolder {
     const val ACTIVE_LIST = "active.txt"
 
     private val graph = AtomicReference(emptyGraph())
+    private val shifting = AtomicBoolean(false)
+    private val windowFiles = AtomicReference<List<File>>(emptyList())
+    @Volatile private var windowLatitude: Double? = null
+    @Volatile private var windowLongitude: Double? = null
+    @Volatile private var windowRadiusMeters: Double = AndroidTileLoader.DEFAULT_WINDOW_METERS
 
     fun current(): RoadGraph = graph.get()
 
@@ -21,6 +29,8 @@ object GraphHolder {
 
     fun clear() {
         graph.set(emptyGraph())
+        windowLatitude = null
+        windowLongitude = null
     }
 
     fun identity(): String {
@@ -28,14 +38,58 @@ object GraphHolder {
         return "${graph.tileId}:${graph.version}"
     }
 
+    fun loadNear(files: List<File>, latitude: Double, longitude: Double) {
+        windowFiles.set(files)
+        val cacheDir = files.firstOrNull()?.parentFile
+        if (cacheDir != null) {
+            writeActiveFiles(cacheDir, files)
+        }
+        var radius = AndroidTileLoader.DEFAULT_WINDOW_METERS
+        var lastError: Throwable? = null
+        while (radius >= 1_500.0) {
+            try {
+                val next = AndroidTileLoader.loadNear(files, latitude, longitude, radius)
+                graph.set(next)
+                windowLatitude = latitude
+                windowLongitude = longitude
+                windowRadiusMeters = radius
+                return
+            } catch (error: OutOfMemoryError) {
+                lastError = error
+                radius /= 2.0
+            }
+        }
+        graph.set(emptyGraph())
+        throw lastError ?: OutOfMemoryError("for lite minne til kommune-flisen")
+    }
+
+    fun shouldShiftWindow(latitude: Double, longitude: Double): Boolean {
+        val originLat = windowLatitude ?: return false
+        val originLon = windowLongitude ?: return false
+        if (windowFiles.get().isEmpty()) return false
+        val moved = Geo.distanceMeters(
+            LatLon(originLat, originLon),
+            LatLon(latitude, longitude),
+        )
+        return moved > windowRadiusMeters * 0.4
+    }
+
+    fun shiftWindowIfNeeded(latitude: Double, longitude: Double) {
+        if (!shouldShiftWindow(latitude, longitude)) return
+        if (!shifting.compareAndSet(false, true)) return
+        try {
+            val files = windowFiles.get()
+            if (files.isEmpty()) return
+            loadNear(files, latitude, longitude)
+        } finally {
+            shifting.set(false)
+        }
+    }
+
     fun loadFromCache(dir: File) {
         val files = activeFiles(dir)
         if (files.isEmpty()) return
-        try {
-            replace(AndroidTileLoader.loadAll(files))
-        } catch (_: Exception) {
-            // Keep the empty graph if a cached tile is unreadable.
-        }
+        windowFiles.set(files)
     }
 
     fun writeActiveFiles(dir: File, files: List<File>) {

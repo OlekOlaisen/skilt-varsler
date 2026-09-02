@@ -7,7 +7,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
 import no.skiltvarsler.settings.SettingsStore
-import no.skiltvarsler.tilesource.AndroidTileLoader
 import no.skiltvarsler.tilesource.GraphHolder
 import no.skiltvarsler.tracking.LastAlertStore
 import org.json.JSONObject
@@ -56,8 +55,7 @@ class TilePrefetchWorker(
             localManifest.writeText(manifestJson.toString())
             val files = needed.map { File(cacheDir, it.file) }.filter { it.exists() }
             if (files.isNotEmpty()) {
-                GraphHolder.writeActiveFiles(cacheDir, files)
-                GraphHolder.replace(AndroidTileLoader.loadAll(files))
+                GraphHolder.loadNear(files, latitude, longitude)
             } else {
                 GraphHolder.clear()
             }

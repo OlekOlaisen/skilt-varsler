@@ -18,10 +18,7 @@ class SkiltApp : Application() {
         super.onCreate()
         AlertNotifier.ensureChannels(this)
         GraphHolder.loadFromCache(File(filesDir, "tiles"))
-        val cached = GraphHolder.current()
-        if (cached.links.isNotEmpty()) {
-            LastAlertStore.setTileStatus("Cache: ${cached.tileId}")
-        }
+        LastAlertStore.setTileStatus("Klar. Start for å hente kommune-flis.")
         val manager = WorkManager.getInstance(this)
         val wifi = Constraints.Builder()
             .setRequiredNetworkType(NetworkType.UNMETERED)

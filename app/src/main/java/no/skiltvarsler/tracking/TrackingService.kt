@@ -145,6 +145,7 @@ class TrackingService : Service() {
     }
 
     private suspend fun handleFix(fix: GpsFix) {
+        GraphHolder.shiftWindowIfNeeded(fix.position.latitude, fix.position.longitude)
         val alerts = engineForCurrentGraph()?.update(fix).orEmpty()
         val match = engine?.currentMatch()
         val status = when {
