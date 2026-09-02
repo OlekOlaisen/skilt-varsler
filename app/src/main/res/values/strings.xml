@@ -2,6 +2,8 @@
     <string name="app_name">Skilt-varsler</string>
     <string name="channel_driving">Kjøring</string>
     <string name="channel_alert">Varsler</string>
-    <string name="tracking_title">Sporer vegnettet</string>
+    <string name="tracking_title">Skilt-varsler</string>
     <string name="tracking_text">Posisjon forlater ikke telefonen</string>
+    <string name="car_notification_reply">Svar</string>
+    <string name="car_notification_mark_as_read">Merk som lest</string>
 </resources>

@@ -42,7 +42,6 @@ class TrackingService : Service() {
     private val fused by lazy { LocationServices.getFusedLocationProviderClient(this) }
     private var lastCoverageKey: String? = null
     private var lastEmptyPrefetchMs: Long = 0L
-    private var lastNotificationStatus: String? = null
     private var cachedManifest: List<ManifestTile> = emptyList()
     private var cachedManifestModified: Long = -1L
     private val callback = object : LocationCallback() {
@@ -74,7 +73,7 @@ class TrackingService : Service() {
                 return START_NOT_STICKY
             }
             ACTION_REPLAY -> {
-                startForegroundDriving("Replay")
+                startForegroundDriving()
                 scope.launch {
                     try {
                         ReplayRunner.run(this@TrackingService)
@@ -87,16 +86,16 @@ class TrackingService : Service() {
                 return START_STICKY
             }
             else -> {
-                startForegroundDriving("Starter sporing")
+                startForegroundDriving()
                 scope.launch { startTracking() }
             }
         }
         return START_STICKY
     }
 
-    private fun startForegroundDriving(status: String) {
-        LastAlertStore.setTracking(status)
-        val notification = AlertNotifier.drivingNotification(this, status)
+    private fun startForegroundDriving() {
+        LastAlertStore.setTracking("Starter sporing")
+        val notification = AlertNotifier.drivingNotification(this)
         try {
             if (android.os.Build.VERSION.SDK_INT >= 34) {
                 startForeground(
@@ -107,7 +106,6 @@ class TrackingService : Service() {
             } else {
                 startForeground(AlertNotifier.DRIVING_NOTIFICATION_ID, notification)
             }
-            lastNotificationStatus = status
         } catch (error: SecurityException) {
             LastAlertStore.setTracking("Kan ikke starte sporing: ${error.message}")
             stopSelf()
@@ -155,18 +153,6 @@ class TrackingService : Service() {
         }
         LastAlertStore.setTracking(status)
         withContext(Dispatchers.Main.immediate) {
-            if (status != lastNotificationStatus) {
-                lastNotificationStatus = status
-                try {
-                    startForeground(
-                        AlertNotifier.DRIVING_NOTIFICATION_ID,
-                        AlertNotifier.drivingNotification(this@TrackingService, status),
-                        ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION,
-                    )
-                } catch (_: SecurityException) {
-                    return@withContext
-                }
-            }
             alerts.forEach { AlertNotifier.publishAlert(this@TrackingService, it) }
         }
     }

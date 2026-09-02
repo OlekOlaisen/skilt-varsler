@@ -15,9 +15,9 @@ TYPE_MAP = {
     596: "PRIORITY_ROAD",
 }
 
-STOP_NUMBERS = {"202", "202.0"}
-YIELD_NUMBERS = {"210", "210.0"}
-HAZARD_PREFIXES = tuple(str(n) for n in range(100, 150))
+STOP_NUMBERS = {"204", "204.0"}
+YIELD_NUMBERS = {"202", "202.0"}
+HAZARD_PREFIXES = tuple(str(n) for n in range(100, 157))
 
 
 def egenskap(obj: dict[str, Any], *names: str) -> Any:
@@ -212,11 +212,11 @@ def drop_skilt_stop_yield_if_regulering_exists(graph: TileGraph, had_regulering:
 
 def classify_sign(number: str) -> str | None:
     token = number.strip()
-    if token in STOP_NUMBERS or token.startswith("202"):
+    if token in STOP_NUMBERS or token.startswith("204"):
         return "STOP"
-    if token in YIELD_NUMBERS or token.startswith("210"):
+    if token in YIELD_NUMBERS or token.startswith("202"):
         return "YIELD"
     head = token.split(".")[0]
-    if head.isdigit() and 100 <= int(head) <= 149:
+    if head.isdigit() and 100 <= int(head) <= 156:
         return "HAZARD"
     return None

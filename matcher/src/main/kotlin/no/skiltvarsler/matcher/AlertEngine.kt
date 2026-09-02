@@ -122,6 +122,7 @@ class AlertEngine(
             body = "$kmh km/t",
             sequenceId = match.sequenceId,
             objectType = null,
+            payload = kmh.toString(),
         )
     }
 
@@ -150,7 +151,7 @@ class AlertEngine(
                         nvdbId = obj.nvdbId,
                         metersAhead = 0.0,
                         title = title,
-                        body = obj.payload.ifBlank { title },
+                        body = SignLabel.displayName(obj.payload, title),
                         sequenceId = obj.sequenceId,
                         objectType = type,
                         payload = obj.payload,
@@ -212,8 +213,8 @@ class AlertEngine(
         AlertKind.FERRY -> "Ferje"
         AlertKind.STOP -> "Stopp"
         AlertKind.YIELD -> "Vikeplikt"
-        AlertKind.HAZARD -> payload.ifBlank { "Fareskilt" }
-        AlertKind.MUNICIPALITY -> payload.ifBlank { "Kommunegrense" }
+        AlertKind.HAZARD -> SignLabel.displayName(payload, "Fareskilt")
+        AlertKind.MUNICIPALITY -> SignLabel.displayName(payload, "Kommunegrense")
         AlertKind.PRIORITY_ROAD -> "Forkjørsveg"
         AlertKind.SECTION_ATK_START -> "Streknings-ATK"
         AlertKind.SECTION_ATK_END -> "Slutt streknings-ATK"

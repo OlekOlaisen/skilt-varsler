@@ -1,42 +1,66 @@
 # Skilt-varsler
 
-Android-varsler langs **NVDB-vegnettet**. Posisjon forlater ikke telefonen. Telefonene treffer aldri NVDB — CI bygger fliser, appen laster statiske filer.
+Road-sign and hazard alerts while you drive, on the phone and in **Android Auto**. GPS stays on the device. The phone never calls NVDB.
 
-Første sannhet: *jeg er på lenke X, om 80 m kommer fotoboks Y i min retning.*
+The app matches your position to Norway’s official road network and warns you when something is ahead **on the road you are on, in your direction**. The app is still a work in progress, so everything is not perfect yet.
 
-## Moduler
+## Features
 
-| Mappe | Rolle |
+- **Direction-aware alerts** — cameras and signs on *your* link, not a parallel road or the opposite carriageway
+- **Android Auto heads-up** — alerts can appear over the map while you navigate
+- **Official sign artwork** — Norwegian traffic-sign icons in the app and in notifications
+- **Automatic map tiles** — the kommune you are in is downloaded as you drive; crossing a border fetches the next one
+
+### On the phone
+
+- **Start / Stop** — turn tracking on or off. Location is used only on the device.
+- **Last alert** — the most recent warning, with the official sign.
+- **Alerts** — turn each alert type on or off. Choices are remembered.
+- **Test-replay** — play a synthetic E6 speed-camera approach to check that phone (and Auto) notifications work.
+
+### Alert types
+
+| Type | Examples |
 | --- | --- |
-| `pipeline/` | Eneste NVDB-klient. Python. Vestby (3216) som første flis. |
-| `tiles/` | SQLite-flisformat og veggraf. |
-| `matcher/` | GPS → lenke/posisjon/retning → varsler. Ingen Android-typer. |
-| `app/` | Compose, foreground service, varsler, innstillinger, test-replay, Android Auto HUN. |
+| Speed cameras | Point cameras (ATK) |
+| Speed limits | Posted limit changes |
+| Section ATK | Average-speed stretches, start and end |
+| Tolls | Toll stations |
+| Wildlife | Moose and other animal-warning signs |
+| Rail crossings | Level crossings |
+| Ferry | Ferry quay |
+| Stop / yield | Stopp and vikeplikt |
+| Hazard signs | Official fare-skilt from NVDB |
+| Priority road | Forkjørsveg |
+| Municipality | Entering a kommune |
 
-## Matcher-tester
+## Download and install
 
-```
-./gradlew :tiles:test :matcher:test
-```
+Road tiles are published on the [latest release](https://github.com/OlekOlaisen/skilt-varsler/releases/latest). Install an APK from Releases when one is attached.
 
-Replay-testen bruker en syntetisk E6-flis (atskilt løp + parallell lokalvei). Vestby har ingen ATK-punkt i NVDB; pipelinen henter likevel vegnett og fartsgrense.
+1. Allow **Install unknown apps** for your browser or file manager.
+2. Open the APK and install.
+3. Grant **location** and **notification** permission.
+4. Tap **Start**. The app waits for GPS, then downloads the tile for the kommune you are in.
 
-## Pipeline
+To update, install the new APK over the one you already have.
 
-```
-cd pipeline
-pip install -r requirements.txt
-python -m skiltvarsler_pipeline --kommune 3216 --out ../tiles-out
-```
+Requires Android 10 or newer.
 
-Sett `NVDB_X_KONTAKTPERSON` (påkrevd mot NVDB fra januar 2026). `X-Client` er `skilt-varsler-pipeline`.
+## Android Auto
 
-Nattlig GitHub Action (`pipeline.yml`) bygger fliser og publiserer dem som GitHub Release `nvdb-tiles`. Appen henter `manifest.json` og `.sqlite` derfra — telefonen treffer aldri NVDB.
+The app is sideloaded, so Android Auto must allow unknown sources:
 
-Flis-URL (standard):
+1. Open Android Auto settings on the phone.
+2. Enable developer settings (tap the version number repeatedly).
+3. Allow unknown sources.
+4. Connect to the car and grant location and notification access.
+5. Pin Skilt-varsler on the Android Auto launcher (Customize launcher).
 
-`https://github.com/OlekOlaisen/skilt-varsler/releases/latest/download`
+Alerts can then show as heads-up over the map while you navigate.
 
-Sett repo-secret `NVDB_X_KONTAKTPERSON` (e-post). Kjør **Actions → NVDB tile pipeline** med kommunenummer (komma-separert, f.eks. `3216` eller `0301,3203,3451`).
+## Privacy
 
-Inneholder data under [NLOD](https://data.norge.no/nlod/no/) tilgjengeliggjort av Statens vegvesen.
+Location is used only on the phone to match roads and signs. The app does not need an account or analytics. Phones download static map tiles; they never contact [NVDB](https://www.vegvesen.no/nvdb).
+
+Road data is published by Statens vegvesen under [NLOD](https://data.norge.no/nlod/no/).

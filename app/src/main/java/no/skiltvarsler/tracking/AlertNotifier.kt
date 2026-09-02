@@ -4,33 +4,45 @@ import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
+import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.graphics.Bitmap
 import androidx.car.app.notification.CarAppExtender
 import androidx.car.app.notification.CarNotificationManager
 import androidx.car.app.notification.CarPendingIntent
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
+import androidx.core.app.Person
+import androidx.core.app.RemoteInput
+import androidx.core.graphics.drawable.IconCompat
 import no.skiltvarsler.MainActivity
 import no.skiltvarsler.R
+import no.skiltvarsler.car.CarMessageActionService
 import no.skiltvarsler.car.SkiltCarAppService
 import no.skiltvarsler.matcher.Alert
 import no.skiltvarsler.matcher.AlertKind
+import no.skiltvarsler.signs.SignRenderer
 
 object AlertNotifier {
-    const val CHANNEL_DRIVING = "driving"
+    const val CHANNEL_DRIVING = "driving_local"
     const val CHANNEL_ALERT = "alert"
     const val DRIVING_NOTIFICATION_ID = 10
     const val ALERT_NOTIFICATION_ID = 20
 
     fun ensureChannels(context: Context) {
         val manager = context.getSystemService(NotificationManager::class.java)
+        manager.deleteNotificationChannel("driving")
         manager.createNotificationChannel(
             NotificationChannel(
                 CHANNEL_DRIVING,
                 context.getString(R.string.channel_driving),
-                NotificationManager.IMPORTANCE_LOW,
-            ),
+                NotificationManager.IMPORTANCE_MIN,
+            ).apply {
+                setShowBadge(false)
+                setSound(null, null)
+                enableVibration(false)
+            },
         )
         manager.createNotificationChannel(
             NotificationChannel(
@@ -44,7 +56,7 @@ object AlertNotifier {
         )
     }
 
-    fun drivingNotification(context: Context, status: String): Notification {
+    fun drivingNotification(context: Context): Notification {
         val open = PendingIntent.getActivity(
             context,
             0,
@@ -53,35 +65,43 @@ object AlertNotifier {
         )
         return NotificationCompat.Builder(context, CHANNEL_DRIVING)
             .setSmallIcon(R.drawable.ic_alert_camera)
-            .setContentTitle(context.getString(R.string.tracking_title))
-            .setContentText(status)
+            .setContentTitle(context.getString(R.string.app_name))
             .setOngoing(true)
+            .setSilent(true)
+            .setLocalOnly(true)
+            .setShowWhen(false)
             .setOnlyAlertOnce(true)
+            .setPriority(NotificationCompat.PRIORITY_MIN)
+            .setVisibility(NotificationCompat.VISIBILITY_SECRET)
             .setContentIntent(open)
             .setCategory(NotificationCompat.CATEGORY_SERVICE)
+            .setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_DEFERRED)
             .build()
     }
 
     fun publishAlert(context: Context, alert: Alert) {
         LastAlertStore.update(alert)
-        val openApp = PendingIntent.getActivity(
-            context,
-            1,
-            Intent(context, MainActivity::class.java),
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
-        )
         val icon = iconRes(alert.kind)
+        val sign = SignRenderer.bitmap(context, alert, 256)
         val builder = NotificationCompat.Builder(context, CHANNEL_ALERT)
             .setSmallIcon(icon)
             .setContentTitle(alert.title)
             .setContentText(alert.body)
+            .setStyle(messagingStyle(context, alert, sign))
             .setPriority(NotificationCompat.PRIORITY_HIGH)
-            .setCategory(NotificationCompat.CATEGORY_NAVIGATION)
+            .setCategory(NotificationCompat.CATEGORY_MESSAGE)
             .setOnlyAlertOnce(true)
             .setAutoCancel(true)
-            .setContentIntent(openApp)
+            .setShowWhen(false)
+            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+            .setContentIntent(phoneContentIntent(context))
             .setTimeoutAfter(8_000)
-        extendForCar(context, builder, alert, icon)
+            .addAction(replyAction(context))
+            .addAction(markAsReadAction(context))
+        if (sign != null) {
+            builder.setLargeIcon(sign)
+        }
+        builder.extend(carAppExtender(context, alert, icon, sign))
         try {
             CarNotificationManager.from(context).notify(ALERT_NOTIFICATION_ID, builder)
         } catch (_: Exception) {
@@ -89,37 +109,128 @@ object AlertNotifier {
         }
     }
 
-    private fun extendForCar(
+    private fun messagingStyle(
         context: Context,
-        builder: NotificationCompat.Builder,
+        alert: Alert,
+        sign: Bitmap?,
+    ): NotificationCompat.MessagingStyle {
+        val driver = Person.Builder()
+            .setName(context.getString(R.string.app_name))
+            .setKey("driver")
+            .build()
+        val senderBuilder = Person.Builder()
+            .setName(alert.title)
+            .setKey("skilt-varsler")
+            .setImportant(true)
+        if (sign != null) {
+            senderBuilder.setIcon(IconCompat.createWithBitmap(sign))
+        }
+        return NotificationCompat.MessagingStyle(driver)
+            .setGroupConversation(false)
+            .addMessage(
+                NotificationCompat.MessagingStyle.Message(
+                    alert.body.ifBlank { "\u200B" },
+                    System.currentTimeMillis(),
+                    senderBuilder.build(),
+                ),
+            )
+    }
+
+    private fun carAppExtender(
+        context: Context,
         alert: Alert,
         icon: Int,
-    ) {
-        val openCar = try {
-            CarPendingIntent.getCarApp(
-                context,
-                2,
-                Intent(Intent.ACTION_VIEW).setClass(context, SkiltCarAppService::class.java),
-                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
-            )
-        } catch (_: Exception) {
-            null
-        } ?: return
-        builder.extend(
-            CarAppExtender.Builder()
-                .setContentTitle(alert.title)
-                .setContentText(alert.body)
-                .setSmallIcon(icon)
-                .setImportance(NotificationManagerCompat.IMPORTANCE_HIGH)
-                .setContentIntent(openCar)
-                .build(),
+        sign: Bitmap?,
+    ): CarAppExtender {
+        val openCar = carAppContentIntent(context)
+        val extender = CarAppExtender.Builder()
+            .setContentTitle(alert.title)
+            .setContentText(alert.body)
+            .setSmallIcon(icon)
+            .setImportance(NotificationManager.IMPORTANCE_HIGH)
+            .setContentIntent(openCar)
+        if (sign != null) {
+            extender.setLargeIcon(sign)
+        }
+        return extender.build()
+    }
+
+    private fun phoneContentIntent(context: Context): PendingIntent {
+        return PendingIntent.getActivity(
+            context,
+            1,
+            Intent(context, MainActivity::class.java),
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
     }
 
+    private fun carAppContentIntent(context: Context): PendingIntent {
+        val carIntent = Intent(Intent.ACTION_VIEW).setComponent(
+            ComponentName(context, SkiltCarAppService::class.java),
+        )
+        return CarPendingIntent.getCarApp(
+            context,
+            2,
+            carIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT,
+        )
+    }
+
+    /**
+     * Android Auto only shows heads-up over other apps for messaging
+     * notifications that include reply and mark-as-read actions.
+     */
+    private fun replyAction(context: Context): NotificationCompat.Action {
+        val replyIntent = Intent(context, CarMessageActionService::class.java).apply {
+            action = CarMessageActionService.ACTION_REPLY
+        }
+        val replyPending = PendingIntent.getService(
+            context,
+            11,
+            replyIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_MUTABLE,
+        )
+        val replyInput = RemoteInput.Builder(CarMessageActionService.REMOTE_INPUT_RESULT_KEY)
+            .setLabel(context.getString(R.string.car_notification_reply))
+            .build()
+        return NotificationCompat.Action.Builder(
+            iconRes(AlertKind.SPEED_CAMERA),
+            context.getString(R.string.car_notification_reply),
+            replyPending,
+        )
+            .setSemanticAction(NotificationCompat.Action.SEMANTIC_ACTION_REPLY)
+            .setShowsUserInterface(false)
+            .addRemoteInput(replyInput)
+            .build()
+    }
+
+    private fun markAsReadAction(context: Context): NotificationCompat.Action {
+        val markIntent = Intent(context, CarMessageActionService::class.java).apply {
+            action = CarMessageActionService.ACTION_MARK_AS_READ
+        }
+        val markPending = PendingIntent.getService(
+            context,
+            12,
+            markIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
+        return NotificationCompat.Action.Builder(
+            iconRes(AlertKind.SPEED_CAMERA),
+            context.getString(R.string.car_notification_mark_as_read),
+            markPending,
+        )
+            .setSemanticAction(NotificationCompat.Action.SEMANTIC_ACTION_MARK_AS_READ)
+            .setShowsUserInterface(false)
+            .build()
+    }
+
     private fun notifyOnPhone(context: Context, builder: NotificationCompat.Builder) {
-        if (!NotificationManagerCompat.from(context).areNotificationsEnabled()) return
+        if (!NotificationManagerCompat.from(context).areNotificationsEnabled()) {
+            return
+        }
         try {
-            NotificationManagerCompat.from(context).notify(ALERT_NOTIFICATION_ID, builder.build())
+            NotificationManagerCompat.from(context)
+                .notify(ALERT_NOTIFICATION_ID, builder.build())
         } catch (_: SecurityException) {
             // Notification permission not granted yet.
         }

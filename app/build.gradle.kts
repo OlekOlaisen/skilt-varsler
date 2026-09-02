@@ -12,8 +12,8 @@ android {
         applicationId = "no.skiltvarsler"
         minSdk = 29
         targetSdk = 35
-        versionCode = 1
-        versionName = "0.1.0"
+        versionCode = 5
+        versionName = "0.1.4"
         val tileBaseUrl = (project.findProperty("tileBaseUrl") as String?)
             ?: "https://github.com/OlekOlaisen/skilt-varsler/releases/latest/download"
         buildConfigField("String", "TILE_BASE_URL", "\"$tileBaseUrl\"")
@@ -22,6 +22,7 @@ android {
     buildTypes {
         release {
             isMinifyEnabled = false
+            signingConfig = signingConfigs.getByName("debug")
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro",
@@ -41,6 +42,10 @@ android {
     buildFeatures {
         compose = true
         buildConfig = true
+    }
+
+    lint {
+        disable += "InvalidFragmentVersionForActivityResult"
     }
 }
 
@@ -67,5 +72,6 @@ dependencies {
     implementation(libs.androidx.work.runtime.ktx)
     implementation(libs.androidx.car.app)
     implementation(libs.androidx.car.app.projected)
+    implementation(libs.androidsvg)
     debugImplementation(libs.androidx.compose.ui.tooling)
 }

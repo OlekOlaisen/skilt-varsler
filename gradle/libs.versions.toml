@@ -13,6 +13,7 @@ carApp = "1.7.0"
 sqliteJdbc = "3.47.1.0"
 junit = "4.13.2"
 truth = "1.4.4"
+androidsvg = "1.4"
 
 [libraries]
 kotlin-stdlib = { module = "org.jetbrains.kotlin:kotlin-stdlib", version.ref = "kotlin" }
@@ -39,6 +40,7 @@ androidx-car-app-projected = { module = "androidx.car.app:app-projected", versio
 sqlite-jdbc = { module = "org.xerial:sqlite-jdbc", version.ref = "sqliteJdbc" }
 junit = { module = "junit:junit", version.ref = "junit" }
 truth = { module = "com.google.truth:truth", version.ref = "truth" }
+androidsvg = { module = "com.caverock:androidsvg-aar", version.ref = "androidsvg" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
