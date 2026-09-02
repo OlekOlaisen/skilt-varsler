@@ -4,9 +4,9 @@ on:
   workflow_dispatch:
     inputs:
       kommuner:
-        description: Kommunenummer, komma-separert
+        description: Kommunenummer, komma-separert, eller all
         required: true
-        default: "3216"
+        default: "all"
   schedule:
     - cron: "20 2 * * *"
 
@@ -14,8 +14,40 @@ permissions:
   contents: write
 
 jobs:
-  build-kommune:
+  plan:
     runs-on: ubuntu-latest
+    outputs:
+      chunks: ${{ steps.plan.outputs.chunks }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: Install
+        run: pip install -r pipeline/requirements.txt
+      - id: plan
+        working-directory: pipeline
+        env:
+          NVDB_X_CLIENT: skilt-varsler-pipeline
+          NVDB_X_KONTAKTPERSON: ${{ secrets.NVDB_X_KONTAKTPERSON }}
+        run: |
+          KOMMUNER="${{ github.event.inputs.kommuner || 'all' }}"
+          CHUNKS=$(python -m skiltvarsler_pipeline --plan-chunks 15 --kommune "$KOMMUNER")
+          {
+            echo "chunks<<EOF"
+            echo "$CHUNKS"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+  build:
+    needs: plan
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    strategy:
+      fail-fast: false
+      max-parallel: 4
+      matrix:
+        include: ${{ fromJson(needs.plan.outputs.chunks) }}
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-python@v6
@@ -33,26 +65,51 @@ jobs:
             EXTRA="--skip-if-unchanged"
           fi
           python -m skiltvarsler_pipeline \
-            --kommune "${{ github.event.inputs.kommuner || '3216' }}" \
+            --kommune "${{ matrix.kommuner }}" \
             --out tiles-out \
             $EXTRA
         working-directory: pipeline
       - uses: actions/upload-artifact@v4
         if: hashFiles('pipeline/tiles-out/manifest.json') != ''
         with:
-          name: nvdb-tiles
+          name: nvdb-tiles-${{ matrix.id }}
           path: pipeline/tiles-out
+          if-no-files-found: ignore
+
+  publish:
+    needs: [plan, build]
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          pattern: nvdb-tiles-*
+          path: incoming
+          merge-multiple: false
       - name: Publish GitHub Release
-        if: hashFiles('pipeline/tiles-out/manifest.json') != ''
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          if ! find incoming -name 'manifest.json' | grep -q .; then
+            echo "Ingen nye fliser å publisere"
+            exit 0
+          fi
+          mkdir -p existing
           TAG=nvdb-tiles
           if gh release view "$TAG" >/dev/null 2>&1; then
-            gh release upload "$TAG" pipeline/tiles-out/* --clobber
+            gh release download "$TAG" --pattern manifest.json --dir existing || true
+          fi
+          python -m skiltvarsler_pipeline --merge-release existing incoming merged
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" merged/* --clobber
             gh release edit "$TAG" --notes "Oppdatert ${GITHUB_SHA:0:7} (${GITHUB_RUN_ID})"
           else
-            gh release create "$TAG" pipeline/tiles-out/* \
+            gh release create "$TAG" merged/* \
               --title "NVDB-fliser" \
               --notes "Første uttrekk ${GITHUB_SHA:0:7}" \
               --latest

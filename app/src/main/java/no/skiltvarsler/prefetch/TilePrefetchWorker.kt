@@ -27,21 +27,28 @@ class TilePrefetchWorker(
         }
         val cacheDir = File(applicationContext.filesDir, "tiles").apply { mkdirs() }
         try {
-            LastAlertStore.setTileStatus("Henter fliser…")
+            LastAlertStore.setTileStatus("Henter kommune-flis…")
             val manifestJson = JSONObject(downloadText("$base/manifest.json"))
             val allTiles = TilePlanner.parseManifest(manifestJson)
-            val needed = TilePlanner.select(
-                tiles = allTiles,
-                latitude = LastAlertStore.latitude,
-                longitude = LastAlertStore.longitude,
-                bearingDegrees = LastAlertStore.bearingDegrees,
-            )
             val localManifest = File(cacheDir, "manifest.json")
+            val latitude = LastAlertStore.latitude
+            val longitude = LastAlertStore.longitude
+            val needed = if (latitude != null && longitude != null) {
+                TilePlanner.select(
+                    tiles = allTiles,
+                    latitude = latitude,
+                    longitude = longitude,
+                    bearingDegrees = LastAlertStore.bearingDegrees,
+                )
+            } else {
+                refreshCached(allTiles, cacheDir)
+            }
             val localVersions = readLocalVersions(localManifest)
             var downloaded = 0
             for (tile in needed) {
-                if (localVersions[tile.id] == tile.version) continue
                 val target = File(cacheDir, tile.file)
+                val alreadyHave = target.exists() && localVersions[tile.id] == tile.version
+                if (alreadyHave) continue
                 val tmp = File(cacheDir, "${tile.file}.tmp")
                 downloadTo(tmp, "$base/${tile.file}")
                 if (target.exists()) target.delete()
@@ -54,20 +61,43 @@ class TilePrefetchWorker(
             localManifest.writeText(manifestJson.toString())
             val files = needed.map { File(cacheDir, it.file) }.filter { it.exists() }
             if (files.isNotEmpty()) {
+                GraphHolder.writeActiveFiles(cacheDir, files)
                 GraphHolder.replace(AndroidTileLoader.loadAll(files))
+            } else if (latitude != null && longitude != null) {
+                GraphHolder.clear()
             }
-            val status = if (files.isEmpty()) {
-                "Ingen fliser i manifestet"
-            } else {
-                val graph = GraphHolder.current()
-                "Fliser: ${graph.tileId} (${files.size} filer, $downloaded nye)"
-            }
-            LastAlertStore.setTileStatus(status)
+            LastAlertStore.setTileStatus(statusText(allTiles, files, downloaded, latitude, longitude))
             Result.success()
         } catch (error: Exception) {
             LastAlertStore.setTileStatus("Flisfeil: ${error.message ?: error.javaClass.simpleName}")
             Result.retry()
         }
+    }
+
+    private fun refreshCached(
+        allTiles: List<ManifestTile>,
+        cacheDir: File,
+    ): List<ManifestTile> {
+        val activeNames = GraphHolder.activeFiles(cacheDir).map { it.name }.toSet()
+        return allTiles.filter { it.file in activeNames }
+    }
+
+    private fun statusText(
+        allTiles: List<ManifestTile>,
+        files: List<File>,
+        downloaded: Int,
+        latitude: Double?,
+        longitude: Double?,
+    ): String {
+        if (allTiles.isEmpty()) return "Ingen fliser i manifestet"
+        if (files.isEmpty() && latitude != null && longitude != null) {
+            return "Ingen flis for denne posisjonen ennå"
+        }
+        if (files.isEmpty()) {
+            return "Venter på GPS for å hente kommune-flis"
+        }
+        val graph = GraphHolder.current()
+        return "Fliser: ${graph.tileId} (${files.size} filer, $downloaded nye)"
     }
 
     private fun readLocalVersions(manifestFile: File): Map<String, String> {

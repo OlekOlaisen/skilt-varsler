@@ -20,9 +20,14 @@ import kotlinx.coroutines.launch
 import no.skiltvarsler.matcher.AlertEngine
 import no.skiltvarsler.matcher.AlertSettings
 import no.skiltvarsler.matcher.GpsFix
+import no.skiltvarsler.prefetch.TilePlanner
+import no.skiltvarsler.prefetch.TilePrefetch
 import no.skiltvarsler.settings.SettingsStore
 import no.skiltvarsler.tiles.LatLon
+import no.skiltvarsler.tiles.TileSelector
 import no.skiltvarsler.tilesource.GraphHolder
+import org.json.JSONObject
+import java.io.File
 
 class TrackingService : Service() {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
@@ -30,10 +35,13 @@ class TrackingService : Service() {
     private var graphIdentity: String? = null
     private var alertSettings: AlertSettings? = null
     private val fused by lazy { LocationServices.getFusedLocationProviderClient(this) }
+    private var lastCoverageKey: String? = null
+    private var lastEmptyPrefetchMs: Long = 0L
     private val callback = object : LocationCallback() {
         override fun onLocationResult(result: LocationResult) {
             val location = result.lastLocation ?: return
             LastAlertStore.setFix(location.latitude, location.longitude, if (location.hasBearing()) location.bearing.toDouble() else null)
+            maybePrefetchForLocation()
             val fix = GpsFix(
                 timeMs = location.time,
                 position = LatLon(location.latitude, location.longitude),
@@ -43,10 +51,10 @@ class TrackingService : Service() {
             )
             val alerts = engineForCurrentGraph()?.update(fix).orEmpty()
             val match = engine?.currentMatch()
-            val status = if (match == null) {
-                "Ingen match"
-            } else {
-                "Lenke ${match.sequenceId}  pos ${"%.3f".format(match.position)}"
+            val status = when {
+                !GraphHolder.isReady() -> "Henter kommune-flis…"
+                match == null -> "Ingen match"
+                else -> "Lenke ${match.sequenceId}  pos ${"%.3f".format(match.position)}"
             }
             LastAlertStore.setTracking(status)
             try {
@@ -114,6 +122,7 @@ class TrackingService : Service() {
     private suspend fun startTracking() {
         alertSettings = SettingsStore(applicationContext).settings.first()
         engineForCurrentGraph()
+        TilePrefetch.enqueueNow(this)
         val request = LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, 1000L)
             .setMinUpdateIntervalMillis(800L)
             .setMinUpdateDistanceMeters(0f)
@@ -132,6 +141,45 @@ class TrackingService : Service() {
         return next
     }
 
+    private fun maybePrefetchForLocation() {
+        val latitude = LastAlertStore.latitude ?: return
+        val longitude = LastAlertStore.longitude ?: return
+        val manifestFile = File(filesDir, "tiles/manifest.json")
+        if (!manifestFile.exists()) {
+            val now = System.currentTimeMillis()
+            if (lastCoverageKey == PENDING_MANIFEST && now - lastEmptyPrefetchMs < EMPTY_RETRY_MS) return
+            lastCoverageKey = PENDING_MANIFEST
+            lastEmptyPrefetchMs = now
+            TilePrefetch.enqueueNow(this)
+            return
+        }
+        val tiles = try {
+            TilePlanner.parseManifest(JSONObject(manifestFile.readText()))
+        } catch (_: Exception) {
+            TilePrefetch.enqueueNow(this)
+            return
+        }
+        val needed = TilePlanner.select(
+            tiles = tiles,
+            latitude = latitude,
+            longitude = longitude,
+            bearingDegrees = LastAlertStore.bearingDegrees,
+        )
+        if (needed.isEmpty()) {
+            val now = System.currentTimeMillis()
+            if (now - lastEmptyPrefetchMs < EMPTY_RETRY_MS) return
+            lastEmptyPrefetchMs = now
+            lastCoverageKey = TileSelector.coverageKey(emptyList())
+            TilePrefetch.enqueueNow(this)
+            return
+        }
+        val coverageKey = TileSelector.coverageKey(needed.map { it.toCoverage() })
+        val alreadyLoaded = GraphHolder.isReady() && GraphHolder.current().tileId == coverageKey
+        if (coverageKey == lastCoverageKey && alreadyLoaded) return
+        lastCoverageKey = coverageKey
+        TilePrefetch.enqueueNow(this)
+    }
+
     override fun onDestroy() {
         fused.removeLocationUpdates(callback)
         scope.cancel()
@@ -141,5 +189,7 @@ class TrackingService : Service() {
     companion object {
         const val ACTION_STOP = "no.skiltvarsler.STOP"
         const val ACTION_REPLAY = "no.skiltvarsler.REPLAY"
+        private const val PENDING_MANIFEST = "pending-manifest"
+        private const val EMPTY_RETRY_MS = 120_000L
     }
 }

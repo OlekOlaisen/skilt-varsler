@@ -19,7 +19,7 @@ class SkiltApp : Application() {
         AlertNotifier.ensureChannels(this)
         GraphHolder.loadFromCache(File(filesDir, "tiles"))
         val cached = GraphHolder.current()
-        if (cached.tileId != "fixture-e6-vestby-like") {
+        if (cached.links.isNotEmpty()) {
             LastAlertStore.setTileStatus("Cache: ${cached.tileId}")
         }
         val manager = WorkManager.getInstance(this)

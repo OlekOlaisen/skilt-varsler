@@ -1,10 +1,8 @@
 package no.skiltvarsler.prefetch
 
-import no.skiltvarsler.tiles.Geo
-import no.skiltvarsler.tiles.LatLon
+import no.skiltvarsler.tiles.TileCoverage
+import no.skiltvarsler.tiles.TileSelector
 import org.json.JSONObject
-import kotlin.math.max
-import kotlin.math.min
 
 data class ManifestTile(
     val id: String,
@@ -15,16 +13,27 @@ data class ManifestTile(
     val maxLon: Double,
     val maxLat: Double,
 ) {
-    fun contains(latitude: Double, longitude: Double): Boolean {
-        return longitude >= minLon && longitude <= maxLon && latitude >= minLat && latitude <= maxLat
-    }
-
-    fun expanded(degrees: Double): ManifestTile = copy(
-        minLon = minLon - degrees,
-        minLat = minLat - degrees,
-        maxLon = maxLon + degrees,
-        maxLat = maxLat + degrees,
+    fun toCoverage(): TileCoverage = TileCoverage(
+        id = id,
+        version = version,
+        file = file,
+        minLon = minLon,
+        minLat = minLat,
+        maxLon = maxLon,
+        maxLat = maxLat,
     )
+
+    companion object {
+        fun from(coverage: TileCoverage): ManifestTile = ManifestTile(
+            id = coverage.id,
+            version = coverage.version,
+            file = coverage.file,
+            minLon = coverage.minLon,
+            minLat = coverage.minLat,
+            maxLon = coverage.maxLon,
+            maxLat = coverage.maxLat,
+        )
+    }
 }
 
 object TilePlanner {
@@ -49,33 +58,14 @@ object TilePlanner {
         latitude: Double?,
         longitude: Double?,
         bearingDegrees: Double?,
-        lookaheadKm: Double = 40.0,
+        lookaheadKm: Double = TileSelector.DEFAULT_LOOKAHEAD_KM,
     ): List<ManifestTile> {
-        if (tiles.size <= 2 || latitude == null || longitude == null) {
-            return tiles
-        }
-        val here = tiles.filter { it.contains(latitude, longitude) }
-        val neighborPad = 0.18
-        val neighbors = tiles.filter { tile ->
-            here.any { current ->
-                boxesOverlap(current.expanded(neighborPad), tile)
-            } || tile.contains(latitude, longitude)
-        }
-        val ahead = if (bearingDegrees == null) {
-            emptyList()
-        } else {
-            val origin = LatLon(latitude, longitude)
-            val samples = listOf(10.0, 25.0, lookaheadKm).map { km ->
-                Geo.destination(origin, bearingDegrees, km * 1000.0)
-            }
-            tiles.filter { tile -> samples.any { tile.contains(it.latitude, it.longitude) } }
-        }
-        val chosen = (here + neighbors + ahead).distinctBy { it.id }
-        return chosen.ifEmpty { tiles }
-    }
-
-    private fun boxesOverlap(a: ManifestTile, b: ManifestTile): Boolean {
-        return max(a.minLon, b.minLon) <= min(a.maxLon, b.maxLon) &&
-            max(a.minLat, b.minLat) <= min(a.maxLat, b.maxLat)
+        return TileSelector.select(
+            tiles = tiles.map { it.toCoverage() },
+            latitude = latitude,
+            longitude = longitude,
+            bearingDegrees = bearingDegrees,
+            lookaheadKm = lookaheadKm,
+        ).map { ManifestTile.from(it) }
     }
 }

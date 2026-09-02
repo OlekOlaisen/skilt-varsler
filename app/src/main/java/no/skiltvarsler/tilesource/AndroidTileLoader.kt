@@ -116,7 +116,7 @@ object AndroidTileLoader {
 
     fun loadAll(files: List<File>): RoadGraph {
         val builder = RoadGraphBuilder()
-        builder.tileId = files.joinToString("+") { it.nameWithoutExtension }
+        builder.tileId = files.map { it.nameWithoutExtension }.sorted().joinToString("+")
         builder.version = files.maxOfOrNull { it.lastModified() }?.toString() ?: "0"
         for (file in files) {
             val part = load(file)

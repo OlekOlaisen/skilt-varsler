@@ -11,7 +11,8 @@ CONTACT = os.environ.get("NVDB_X_KONTAKTPERSON") or "skilt-varsler@localhost"
 
 
 class NvdbClient:
-    def __init__(self, timeout: float = 60.0) -> None:
+    def __init__(self, timeout: float = 120.0) -> None:
+        self._kommuner: list[dict[str, Any]] | None = None
         self._http = httpx.Client(
             base_url=BASE_URL,
             timeout=timeout,
@@ -60,12 +61,27 @@ class NvdbClient:
         )
 
     def kommune_with_extent(self, kommune: int) -> dict[str, Any] | None:
-        response = self._http.get("/omrader/api/v4/kommuner", params={"inkluder": "kartutsnitt"})
-        response.raise_for_status()
-        for item in response.json():
+        for item in self.list_kommuner():
             if int(item.get("nummer") or 0) == kommune:
                 return item
         return None
+
+    def list_kommuner(self) -> list[dict[str, Any]]:
+        if self._kommuner is None:
+            response = self._http.get("/omrader/api/v4/kommuner", params={"inkluder": "kartutsnitt"})
+            response.raise_for_status()
+            payload = response.json()
+            items = payload if isinstance(payload, list) else payload.get("objekter") or payload.get("kommuner") or []
+            self._kommuner = list(items)
+        return self._kommuner
+
+    def list_kommune_numbers(self) -> list[int]:
+        numbers = []
+        for item in self.list_kommuner():
+            number = int(item.get("nummer") or 0)
+            if number > 0:
+                numbers.append(number)
+        return sorted(set(numbers))
 
     def _paginate(self, path: str, params: dict[str, Any]) -> Iterator[dict[str, Any]]:
         start: str | None = None

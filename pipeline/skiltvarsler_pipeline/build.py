@@ -131,6 +131,54 @@ def upsert_manifest(output_dir: Path, version: str, entry: dict) -> None:
     path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
 
 
+def merge_manifests(*manifests: dict) -> dict:
+    by_id: dict[str, dict] = {}
+    version = ""
+    for manifest in manifests:
+        if not manifest:
+            continue
+        version = str(manifest.get("version") or version)
+        for tile in manifest.get("tiles") or []:
+            tile_id = str(tile.get("id") or "")
+            if tile_id:
+                by_id[tile_id] = tile
+    tiles = sorted(by_id.values(), key=lambda item: str(item.get("id")))
+    return {"version": version or datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ"), "tiles": tiles}
+
+
+def merge_release(existing_dir: Path, incoming_dir: Path, output_dir: Path) -> Path:
+    output_dir.mkdir(parents=True, exist_ok=True)
+    manifests = [_read_manifest(existing_dir / "manifest.json")]
+    for path in incoming_dir.rglob("manifest.json"):
+        manifests.append(_read_manifest(path))
+    merged = merge_manifests(*manifests)
+    for sqlite in incoming_dir.rglob("*.sqlite"):
+        target = output_dir / sqlite.name
+        target.write_bytes(sqlite.read_bytes())
+    manifest_path = output_dir / "manifest.json"
+    manifest_path.write_text(json.dumps(merged, indent=2), encoding="utf-8")
+    return manifest_path
+
+
+def _read_manifest(path: Path) -> dict:
+    if not path.exists():
+        return {"version": "", "tiles": []}
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+def chunk_kommuner(numbers: list[int], size: int) -> list[list[int]]:
+    if size <= 0:
+        raise ValueError("chunk size must be positive")
+    return [numbers[index : index + size] for index in range(0, len(numbers), size)]
+
+
+def plan_chunks(numbers: list[int], size: int) -> list[dict[str, str]]:
+    return [
+        {"id": f"{index:02d}", "kommuner": ",".join(str(item) for item in chunk)}
+        for index, chunk in enumerate(chunk_kommuner(numbers, size))
+    ]
+
+
 def norway_grid(cell_degrees: float = 0.18) -> list[dict[str, float]]:
     min_lon, min_lat = 4.0, 57.8
     max_lon, max_lat = 31.5, 71.4

@@ -41,12 +41,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.work.OneTimeWorkRequestBuilder
-import androidx.work.WorkManager
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import no.skiltvarsler.matcher.AlertSettings
-import no.skiltvarsler.prefetch.TilePrefetchWorker
+import no.skiltvarsler.prefetch.TilePrefetch
 import no.skiltvarsler.settings.SettingsStore
 import no.skiltvarsler.tracking.LastAlertStore
 
@@ -109,7 +107,7 @@ fun SkiltAppScreen(
             )
             StatusCard(title = "Sporing", value = tracking, subtitle = "Posisjon forlater ikke telefonen")
             StatusCard(title = "Siste varsel", value = lastTitle, subtitle = lastBody)
-            StatusCard(title = "NVDB-fliser", value = tileStatus, subtitle = "CI bygger fliser. Telefonen treffer aldri NVDB.")
+            StatusCard(title = "NVDB-fliser", value = tileStatus, subtitle = "Hentes automatisk for kommunen du er i. Telefonen treffer aldri NVDB.")
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
                 Button(onClick = onStartTracking, modifier = Modifier.weight(1f)) {
                     Icon(Icons.Outlined.PlayArrow, contentDescription = null)
@@ -141,12 +139,11 @@ fun SkiltAppScreen(
             OutlinedButton(
                 onClick = {
                     scope.launch { store.setTileBaseUrl(urlDraft.trim()) }
-                    WorkManager.getInstance(context)
-                        .enqueue(OneTimeWorkRequestBuilder<TilePrefetchWorker>().build())
+                    TilePrefetch.enqueueNow(context)
                 },
                 modifier = Modifier.fillMaxWidth(),
             ) {
-                Text("Oppdater fliser")
+                Text("Hent fliser på nytt")
             }
             Text("Varsler", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
             ToggleRow("Fotoboks", settings.speedCamera) { scope.launch { store.setEnabled("speedCamera", it) } }
