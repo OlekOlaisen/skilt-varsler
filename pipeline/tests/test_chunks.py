@@ -1,7 +1,14 @@
 from pathlib import Path
 import json
 
+from skiltvarsler_pipeline.__main__ import parse_kommune_arg
 from skiltvarsler_pipeline.build import chunk_kommuner, merge_manifests, merge_release, plan_chunks
+
+
+def test_parse_kommune_arg_modes():
+    assert parse_kommune_arg("all") == "all"
+    assert parse_kommune_arg("changed") == "changed"
+    assert parse_kommune_arg("3216, 3220") == [3216, 3220]
 
 
 def test_chunk_kommuner_splits_evenly():

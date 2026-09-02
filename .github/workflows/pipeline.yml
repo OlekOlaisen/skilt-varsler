@@ -4,11 +4,12 @@ on:
   workflow_dispatch:
     inputs:
       kommuner:
-        description: Kommunenummer, komma-separert, eller all
+        description: Kommunenummer, komma-separert, all, eller changed
         required: true
         default: "all"
   schedule:
-    - cron: "20 2 * * *"
+    - cron: "20 2 * * 0"
+    - cron: "20 3 1 * *"
 
 permissions:
   contents: write
@@ -18,6 +19,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       chunks: ${{ steps.plan.outputs.chunks }}
+      has_work: ${{ steps.plan.outputs.has_work }}
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-python@v6
@@ -31,8 +33,22 @@ jobs:
           NVDB_X_CLIENT: skilt-varsler-pipeline
           NVDB_X_KONTAKTPERSON: ${{ secrets.NVDB_X_KONTAKTPERSON }}
         run: |
-          KOMMUNER="${{ github.event.inputs.kommuner || 'all' }}"
-          CHUNKS=$(python -m skiltvarsler_pipeline --plan-chunks 15 --kommune "$KOMMUNER")
+          if [ "${{ github.event_name }}" = "schedule" ]; then
+            if [ "${{ github.event.schedule }}" = "20 3 1 * *" ]; then
+              KOMMUNER=all
+            else
+              KOMMUNER=changed
+            fi
+          else
+            KOMMUNER="${{ github.event.inputs.kommuner || 'all' }}"
+          fi
+          echo "Bygger kommuner: $KOMMUNER"
+          CHUNKS=$(python -m skiltvarsler_pipeline --plan-chunks 15 --kommune "$KOMMUNER" --changelog-days 10)
+          if [ "$CHUNKS" = "[]" ]; then
+            echo "has_work=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_work=true" >> "$GITHUB_OUTPUT"
+          fi
           {
             echo "chunks<<EOF"
             echo "$CHUNKS"
@@ -41,6 +57,7 @@ jobs:
 
   build:
     needs: plan
+    if: needs.plan.outputs.has_work == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 360
     strategy:
@@ -60,14 +77,9 @@ jobs:
           NVDB_X_CLIENT: skilt-varsler-pipeline
           NVDB_X_KONTAKTPERSON: ${{ secrets.NVDB_X_KONTAKTPERSON }}
         run: |
-          EXTRA=""
-          if [ "${{ github.event_name }}" = "schedule" ]; then
-            EXTRA="--skip-if-unchanged"
-          fi
           python -m skiltvarsler_pipeline \
             --kommune "${{ matrix.kommuner }}" \
-            --out tiles-out \
-            $EXTRA
+            --out tiles-out
         working-directory: pipeline
       - uses: actions/upload-artifact@v4
         if: hashFiles('pipeline/tiles-out/manifest.json') != ''
@@ -78,7 +90,7 @@ jobs:
 
   publish:
     needs: [plan, build]
-    if: ${{ !cancelled() }}
+    if: ${{ !cancelled() && needs.plan.outputs.has_work == 'true' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5

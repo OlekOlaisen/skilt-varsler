@@ -57,7 +57,11 @@ class NvdbClient:
     def iter_endringer(self, type_id: int, days: int = 30) -> Iterator[dict[str, Any]]:
         yield from self._paginate(
             f"/vegobjekter/api/v4/vegobjekter/{type_id}/endringer",
-            {"antall": 200, "antallDager": days},
+            {
+                "antall": 200,
+                "antallDager": days,
+                "inkluder": "lokasjon,metadata",
+            },
         )
 
     def kommune_with_extent(self, kommune: int) -> dict[str, Any] | None:

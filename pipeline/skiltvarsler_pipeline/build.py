@@ -4,6 +4,7 @@ import json
 from datetime import datetime, timezone
 from pathlib import Path
 
+from .changelog import kommuner_of_object
 from .coords import parse_wkt_polygon
 from .model import KommunePolygon, TileGraph
 from .nvdb import NvdbClient
@@ -58,6 +59,18 @@ def has_changelog_hits(client: NvdbClient, days: int) -> bool:
         except Exception:
             return True
     return False
+
+
+def kommuner_from_changelog(client: NvdbClient, days: int = 10) -> list[int]:
+    found: set[int] = set()
+    for type_id in CHANGELOG_TYPES:
+        try:
+            for obj in client.iter_endringer(type_id, days=days):
+                found.update(kommuner_of_object(obj))
+        except Exception as error:
+            print(f"Changelog {type_id} feilet: {error}")
+            continue
+    return sorted(found)
 
 
 def build_kommune(
