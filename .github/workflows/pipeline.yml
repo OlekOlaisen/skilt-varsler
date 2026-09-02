@@ -97,6 +97,8 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
+      - name: Install
+        run: pip install -r pipeline/requirements.txt
       - uses: actions/download-artifact@v4
         continue-on-error: true
         with:
@@ -106,6 +108,7 @@ jobs:
       - name: Publish GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
+          PYTHONPATH: pipeline
         run: |
           if ! find incoming -name 'manifest.json' | grep -q .; then
             echo "Ingen nye fliser å publisere"
