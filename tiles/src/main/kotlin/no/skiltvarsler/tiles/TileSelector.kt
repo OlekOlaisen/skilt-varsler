@@ -12,7 +12,14 @@ data class TileCoverage(
     val maxLon: Double,
     val maxLat: Double,
 ) {
+    fun hasUsableBbox(): Boolean {
+        val lonSpan = maxLon - minLon
+        val latSpan = maxLat - minLat
+        return lonSpan in 0.001..6.0 && latSpan in 0.001..6.0
+    }
+
     fun contains(latitude: Double, longitude: Double): Boolean {
+        if (!hasUsableBbox()) return false
         return longitude >= minLon && longitude <= maxLon && latitude >= minLat && latitude <= maxLat
     }
 
@@ -53,6 +60,15 @@ object TileSelector {
             tiles.filter { tile -> samples.any { tile.contains(it.latitude, it.longitude) } }
         }
         return (here + neighbors + ahead).distinctBy { it.id }
+    }
+
+    fun containing(
+        tiles: List<TileCoverage>,
+        latitude: Double?,
+        longitude: Double?,
+    ): List<TileCoverage> {
+        if (latitude == null || longitude == null) return emptyList()
+        return tiles.filter { it.contains(latitude, longitude) }
     }
 
     fun coverageKey(tiles: List<TileCoverage>): String {

@@ -43,6 +43,17 @@ class TileSelectorTest {
     }
 
     @Test
+    fun containingIgnoresNeighborsAndWorldSizedBoxes() {
+        val world = tile("broken", minLon = -180.0, minLat = -90.0, maxLon = 180.0, maxLat = 90.0)
+        val chosen = TileSelector.containing(
+            tiles = listOf(vestby, asKommune, bergen, world),
+            latitude = 59.58,
+            longitude = 10.75,
+        )
+        assertThat(chosen.map { it.id }).containsExactly("kommune-3216")
+    }
+
+    @Test
     fun lookaheadAddsKommuneAlongBearing() {
         val west = tile("kommune-west", minLon = 10.20, minLat = 59.50, maxLon = 10.40, maxLat = 59.70)
         val chosen = TileSelector.select(

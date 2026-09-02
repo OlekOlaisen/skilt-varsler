@@ -33,16 +33,11 @@ class TilePrefetchWorker(
             val localManifest = File(cacheDir, "manifest.json")
             val latitude = LastAlertStore.latitude
             val longitude = LastAlertStore.longitude
-            val needed = if (latitude != null && longitude != null) {
-                TilePlanner.select(
-                    tiles = allTiles,
-                    latitude = latitude,
-                    longitude = longitude,
-                    bearingDegrees = LastAlertStore.bearingDegrees,
-                )
-            } else {
-                refreshCached(allTiles, cacheDir)
+            if (latitude == null || longitude == null) {
+                LastAlertStore.setTileStatus("Venter på GPS for å hente kommune-flis")
+                return@withContext Result.success()
             }
+            val needed = TilePlanner.containing(allTiles, latitude, longitude)
             val localVersions = readLocalVersions(localManifest)
             var downloaded = 0
             for (tile in needed) {
@@ -63,23 +58,19 @@ class TilePrefetchWorker(
             if (files.isNotEmpty()) {
                 GraphHolder.writeActiveFiles(cacheDir, files)
                 GraphHolder.replace(AndroidTileLoader.loadAll(files))
-            } else if (latitude != null && longitude != null) {
+            } else {
                 GraphHolder.clear()
             }
             LastAlertStore.setTileStatus(statusText(allTiles, files, downloaded, latitude, longitude))
             Result.success()
+        } catch (error: OutOfMemoryError) {
+            GraphHolder.clear()
+            LastAlertStore.setTileStatus("Flisfeil: for lite minne til kommune-flisen")
+            Result.failure()
         } catch (error: Exception) {
             LastAlertStore.setTileStatus("Flisfeil: ${error.message ?: error.javaClass.simpleName}")
             Result.retry()
         }
-    }
-
-    private fun refreshCached(
-        allTiles: List<ManifestTile>,
-        cacheDir: File,
-    ): List<ManifestTile> {
-        val activeNames = GraphHolder.activeFiles(cacheDir).map { it.name }.toSet()
-        return allTiles.filter { it.file in activeNames }
     }
 
     private fun statusText(

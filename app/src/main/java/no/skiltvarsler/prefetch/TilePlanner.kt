@@ -45,10 +45,10 @@ object TilePlanner {
                 id = tile.getString("id"),
                 version = tile.optString("version", json.optString("version")),
                 file = tile.getString("file"),
-                minLon = tile.optDouble("min_lon", -180.0),
-                minLat = tile.optDouble("min_lat", -90.0),
-                maxLon = tile.optDouble("max_lon", 180.0),
-                maxLat = tile.optDouble("max_lat", 90.0),
+                minLon = tile.optDouble("min_lon", 0.0),
+                minLat = tile.optDouble("min_lat", 0.0),
+                maxLon = tile.optDouble("max_lon", 0.0),
+                maxLat = tile.optDouble("max_lat", 0.0),
             )
         }
     }
@@ -66,6 +66,18 @@ object TilePlanner {
             longitude = longitude,
             bearingDegrees = bearingDegrees,
             lookaheadKm = lookaheadKm,
+        ).map { ManifestTile.from(it) }
+    }
+
+    fun containing(
+        tiles: List<ManifestTile>,
+        latitude: Double?,
+        longitude: Double?,
+    ): List<ManifestTile> {
+        return TileSelector.containing(
+            tiles = tiles.map { it.toCoverage() },
+            latitude = latitude,
+            longitude = longitude,
         ).map { ManifestTile.from(it) }
     }
 }
