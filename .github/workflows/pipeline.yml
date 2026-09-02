@@ -1,0 +1,59 @@
+name: NVDB tile pipeline
+
+on:
+  workflow_dispatch:
+    inputs:
+      kommuner:
+        description: Kommunenummer, komma-separert
+        required: true
+        default: "3216"
+  schedule:
+    - cron: "20 2 * * *"
+
+permissions:
+  contents: write
+
+jobs:
+  build-kommune:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install
+        run: pip install -r pipeline/requirements.txt
+      - name: Build tile
+        env:
+          NVDB_X_CLIENT: skilt-varsler-pipeline
+          NVDB_X_KONTAKTPERSON: ${{ secrets.NVDB_X_KONTAKTPERSON }}
+        run: |
+          EXTRA=""
+          if [ "${{ github.event_name }}" = "schedule" ]; then
+            EXTRA="--skip-if-unchanged"
+          fi
+          python -m skiltvarsler_pipeline \
+            --kommune "${{ github.event.inputs.kommuner || '3216' }}" \
+            --out tiles-out \
+            $EXTRA
+        working-directory: pipeline
+      - uses: actions/upload-artifact@v4
+        if: hashFiles('pipeline/tiles-out/manifest.json') != ''
+        with:
+          name: nvdb-tiles
+          path: pipeline/tiles-out
+      - name: Publish GitHub Release
+        if: hashFiles('pipeline/tiles-out/manifest.json') != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG=nvdb-tiles
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" pipeline/tiles-out/* --clobber
+            gh release edit "$TAG" --notes "Oppdatert ${GITHUB_SHA:0:7} (${GITHUB_RUN_ID})"
+          else
+            gh release create "$TAG" pipeline/tiles-out/* \
+              --title "NVDB-fliser" \
+              --notes "Første uttrekk ${GITHUB_SHA:0:7}" \
+              --latest
+          fi

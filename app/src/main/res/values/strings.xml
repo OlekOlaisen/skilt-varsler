@@ -1,0 +1,7 @@
+<resources>
+    <string name="app_name">Skilt-varsler</string>
+    <string name="channel_driving">Kjøring</string>
+    <string name="channel_alert">Varsler</string>
+    <string name="tracking_title">Sporer vegnettet</string>
+    <string name="tracking_text">Posisjon forlater ikke telefonen</string>
+</resources>
