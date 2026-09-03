@@ -22,6 +22,10 @@ class AlertCopyTest {
             .isEqualTo("Om 200 m · 24,5 km")
         assertThat(AlertCopy.titleFor(AlertKind.HAZARD, "106.1")).isEqualTo("Smalere veg")
         assertThat(AlertCopy.bodyFor(AlertKind.HAZARD, 150.0, "106.1")).isEqualTo("Om 150 m")
+        assertThat(AlertCopy.titleFor(AlertKind.HAZARD, "106.1 - Smalere veg"))
+            .isEqualTo("Smalere veg")
+        assertThat(ObjectPayload.parse("106.1 - Smalere veg").code).isEqualTo("106.1")
+        assertThat(ObjectPayload.parse("106.1 - Smalere veg").title).isEqualTo("Smalere veg")
     }
 
     @Test

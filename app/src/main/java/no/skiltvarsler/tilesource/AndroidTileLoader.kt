@@ -33,6 +33,29 @@ object AndroidTileLoader {
         return builder.build()
     }
 
+    fun isReadable(file: File): Boolean {
+        if (!file.exists() || file.length() < 100L) {
+            return false
+        }
+        return try {
+            val database = SQLiteDatabase.openDatabase(
+                file.path,
+                null,
+                SQLiteDatabase.OPEN_READONLY,
+            )
+            try {
+                database.rawQuery("SELECT 1 FROM meta LIMIT 1", null).use { rows ->
+                    rows.moveToFirst()
+                }
+                true
+            } finally {
+                database.close()
+            }
+        } catch (_: Exception) {
+            false
+        }
+    }
+
     private fun windowVersion(
         files: List<File>,
         latitude: Double,

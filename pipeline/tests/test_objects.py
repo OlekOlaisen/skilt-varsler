@@ -56,6 +56,8 @@ def test_classifies_stop_yield_and_hazard():
     assert classify_sign("204") == "STOP"
     assert classify_sign("202") == "YIELD"
     assert classify_sign("146.1") == "HAZARD"
+    assert classify_sign("206") == "PRIORITY_ROAD"
+    assert classify_sign("208") == "PRIORITY_ROAD"
     assert classify_sign("362.80") is None
 
 

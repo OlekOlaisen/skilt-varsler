@@ -145,6 +145,10 @@ fun SkiltAppScreen(
                         scope.launch { store.setTileBaseUrl(urlDraft.trim()) }
                         TilePrefetch.enqueueNow(context)
                     },
+                    alertsMuted = settings.alertsMuted,
+                    onAlertsMutedChange = { muted ->
+                        scope.launch { store.setAlertsMuted(muted) }
+                    },
                 )
             }
         }

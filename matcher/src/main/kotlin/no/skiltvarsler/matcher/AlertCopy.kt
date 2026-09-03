@@ -22,7 +22,10 @@ data class ObjectPayload(
             val parts = trimmed.split('|').map { it.trim() }
             return when (parts.size) {
                 1 -> {
-                    if (looksLikeCode(parts[0])) {
+                    val dashed = splitDashedCode(parts[0])
+                    if (dashed != null) {
+                        ObjectPayload(raw = trimmed, code = dashed.first, title = dashed.second, extra = "")
+                    } else if (looksLikeCode(parts[0])) {
                         ObjectPayload(raw = trimmed, code = parts[0], title = "", extra = "")
                     } else {
                         ObjectPayload(raw = trimmed, code = "", title = parts[0], extra = "")
@@ -46,6 +49,19 @@ data class ObjectPayload(
 
         private fun looksLikeCode(value: String): Boolean {
             return value.matches(Regex("""\d+(?:[._]\d+[a-zA-Z]?)?"""))
+        }
+
+        private fun splitDashedCode(value: String): Pair<String, String>? {
+            val separator = value.indexOf(" - ")
+            if (separator <= 0) {
+                return null
+            }
+            val code = value.substring(0, separator).trim()
+            val title = value.substring(separator + 3).trim()
+            if (!looksLikeCode(code) || title.isEmpty()) {
+                return null
+            }
+            return code to title
         }
     }
 }

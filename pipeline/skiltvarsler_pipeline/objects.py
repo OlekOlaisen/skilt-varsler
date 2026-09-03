@@ -397,6 +397,8 @@ def classify_sign(number: str) -> str | None:
         return "STOP"
     if token in YIELD_NUMBERS or token.startswith("202"):
         return "YIELD"
+    if token.startswith("206") or token.startswith("208"):
+        return "PRIORITY_ROAD"
     head = token.split(".")[0]
     if head.isdigit() and 100 <= int(head) <= 156:
         return "HAZARD"

@@ -21,9 +21,11 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 import no.skiltvarsler.log.DebugLog
+import no.skiltvarsler.matcher.AlertCopy
 import no.skiltvarsler.matcher.AlertEngine
 import no.skiltvarsler.matcher.AlertSettings
 import no.skiltvarsler.matcher.GpsFix
+import no.skiltvarsler.matcher.toAlertKind
 import no.skiltvarsler.prefetch.ManifestTile
 import no.skiltvarsler.prefetch.TilePlanner
 import no.skiltvarsler.prefetch.TilePrefetch
@@ -120,9 +122,11 @@ class TrackingService : Service() {
     @SuppressLint("MissingPermission")
     private suspend fun startTracking() {
         alertSettings = SettingsStore(applicationContext).settings.first()
+        LastAlertStore.setAlertsMuted(alertSettings?.alertsMuted == true)
         scope.launch(Dispatchers.Default) {
             SettingsStore(applicationContext).settings.collect { next ->
                 alertSettings = next
+                LastAlertStore.setAlertsMuted(next.alertsMuted)
                 engine?.updateSettings(next)
             }
         }
@@ -163,9 +167,26 @@ class TrackingService : Service() {
             else -> "Lenke ${match.sequenceId}  pos ${"%.3f".format(match.position)}"
         }
         LastAlertStore.setTracking(status)
+        LastAlertStore.setUpcomingSigns(upcomingSigns())
         DebugLog.appendFix(fix, match, LastAlertStore.tileStatus())
         withContext(Dispatchers.Main.immediate) {
+            if (LastAlertStore.alertsMuted) {
+                return@withContext
+            }
             alerts.forEach { AlertNotifier.publishAlert(this@TrackingService, it) }
+        }
+    }
+
+    private fun upcomingSigns(): List<UpcomingSign> {
+        return engine?.currentHorizon().orEmpty().mapNotNull { candidate ->
+            val kind = candidate.obj.type.toAlertKind() ?: return@mapNotNull null
+            UpcomingSign(
+                title = AlertCopy.titleFor(kind, candidate.obj.payload),
+                metersAhead = roundUpcomingMeters(candidate.metersAhead).coerceAtLeast(10),
+                kind = kind,
+                payload = candidate.obj.payload,
+                nvdbId = candidate.obj.nvdbId,
+            )
         }
     }
 
@@ -207,8 +228,18 @@ class TrackingService : Service() {
             return
         }
         val coverageKey = TileSelector.coverageKey(needed.map { it.toCoverage() })
-        val alreadyLoaded = GraphHolder.isReady() && GraphHolder.current().tileId == coverageKey
-        if (coverageKey == lastCoverageKey && alreadyLoaded) return
+        val tilesDir = File(filesDir, "tiles")
+        val neededFiles = needed.map { File(tilesDir, it.file) }
+        val onDisk = neededFiles.isNotEmpty() && neededFiles.all { it.exists() && it.length() > 0L }
+        if (onDisk && GraphHolder.covers(neededFiles)) {
+            lastCoverageKey = coverageKey
+            return
+        }
+        if (coverageKey == lastCoverageKey) {
+            val now = System.currentTimeMillis()
+            if (now - lastEmptyPrefetchMs < EMPTY_RETRY_MS) return
+            lastEmptyPrefetchMs = now
+        }
         lastCoverageKey = coverageKey
         TilePrefetch.enqueueNow(this)
     }

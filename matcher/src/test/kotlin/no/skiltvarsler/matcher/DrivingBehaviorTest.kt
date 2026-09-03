@@ -64,4 +64,56 @@ class DrivingBehaviorTest {
         assertThat(after.sequenceId).isEqualTo(before.sequenceId)
         assertThat(after.position).isWithin(1e-6).of(before.position)
     }
+
+    @Test
+    fun standingStillStillListsCameraOnHorizon() {
+        val graph = SyntheticGraph.e6VestbyLike()
+        val moving = Replay.alongLink(
+            graph.e6NorthLink(),
+            TravelDirection.MED,
+            speedMetersPerSecond = 25.0,
+        )
+        val engine = AlertEngine(graph)
+        moving.take(14).forEach { engine.update(it) }
+        val standing = moving[14].copy(speedMetersPerSecond = 0.0)
+        val alerts = (0..3).flatMap { second ->
+            engine.update(standing.copy(timeMs = standing.timeMs + second * 1000L))
+        }
+        assertThat(alerts.filter { it.kind == AlertKind.SPEED_CAMERA }).isEmpty()
+        assertThat(engine.currentHorizon().map { it.obj.nvdbId }).contains(SyntheticGraph.ATK_ID)
+    }
+
+    @Test
+    fun turningOntoSideStreetSwitchesOnFirstClearSample() {
+        val graph = SyntheticGraph.mainRoadWithSideStreet()
+        val main = graph.sequences.getValue(SyntheticGraph.SEQ_MAIN).links.first()
+        val side = graph.sequences.getValue(SyntheticGraph.SEQ_SIDE).links.first()
+        val matcher = MapMatcher(graph)
+        val alongMain = Replay.alongLink(main, TravelDirection.MED, speedMetersPerSecond = 15.0)
+        alongMain.forEach { matcher.update(it) }
+        assertThat(matcher.current()!!.sequenceId).isEqualTo(SyntheticGraph.SEQ_MAIN)
+
+        val alongSide = Replay.alongLink(
+            side,
+            TravelDirection.MED,
+            speedMetersPerSecond = 12.0,
+            startTimeMs = alongMain.last().timeMs + 1_000L,
+        )
+        matcher.update(alongSide[1])
+        assertThat(matcher.current()!!.sequenceId).isEqualTo(SyntheticGraph.SEQ_SIDE)
+    }
+
+    @Test
+    fun mutedDrivingDoesNotFireCameraButKeepsHorizon() {
+        val graph = SyntheticGraph.e6VestbyLike()
+        val moving = Replay.alongLink(
+            graph.e6NorthLink(),
+            TravelDirection.MED,
+            speedMetersPerSecond = 25.0,
+        )
+        val engine = AlertEngine(graph, AlertSettings(alertsMuted = true))
+        val alerts = moving.take(16).flatMap { engine.update(it) }
+        assertThat(alerts.filter { it.kind == AlertKind.SPEED_CAMERA }).isEmpty()
+        assertThat(engine.currentHorizon().map { it.obj.nvdbId }).contains(SyntheticGraph.ATK_ID)
+    }
 }

@@ -17,6 +17,7 @@ class AlertEngine(
     private var lastKommune: Int? = null
     private var lastInsideWildlife = HashSet<Long>()
     private var lastInsideSectionAtk = HashSet<Long>()
+    private var lastHorizon: List<HorizonCandidate> = emptyList()
 
     fun updateSettings(next: AlertSettings) {
         settings = next
@@ -29,40 +30,49 @@ class AlertEngine(
         lastKommune = null
         lastInsideWildlife.clear()
         lastInsideSectionAtk.clear()
+        lastHorizon = emptyList()
     }
 
     fun currentMatch(): Match? = matcher.current()
 
+    fun currentHorizon(): List<HorizonCandidate> = lastHorizon
+
     fun update(fix: GpsFix): List<Alert> {
-        val match = matcher.update(fix) ?: return emptyList()
+        val match = matcher.update(fix)
+        if (match == null) {
+            lastHorizon = emptyList()
+            return emptyList()
+        }
+        refreshHorizon(match, fix.speedMetersPerSecond)
         val speed = fix.speedMetersPerSecond
         val driving = speed >= AlertWindows.MIN_DRIVING_SPEED_METERS_PER_SECOND
+        val alerting = driving && !settings.alertsMuted
         val alerts = ArrayList<Alert>()
 
-        collectSpeedLimit(match, driving)?.let { alerts.add(it) }
-        collectKommune(match, driving)?.let { alerts.add(it) }
+        collectSpeedLimit(match, alerting)?.let { alerts.add(it) }
+        collectKommune(match, alerting)?.let { alerts.add(it) }
         collectIntervalEntries(
             match,
             lastInsideWildlife,
             RoadObjectType.WILDLIFE,
             AlertKind.WILDLIFE,
-            driving,
+            alerting,
         )?.let { alerts.add(it) }
         collectIntervalEntries(
             match,
             lastInsideSectionAtk,
             RoadObjectType.SECTION_ATK,
             AlertKind.SECTION_ATK_START,
-            driving,
+            alerting,
         )?.let { alerts.add(it) }
-        collectSectionAtkExit(match, driving)?.let { alerts.add(it) }
+        collectSectionAtkExit(match, alerting)?.let { alerts.add(it) }
 
-        if (!driving) {
+        if (!driving || settings.alertsMuted) {
             pruneFired()
             return alerts
         }
 
-        for (candidate in horizon.scan(match, speed)) {
+        for (candidate in lastHorizon) {
             val kind = candidate.obj.type.toAlertKind() ?: continue
             if (kind == AlertKind.WILDLIFE || kind == AlertKind.SECTION_ATK_START) continue
             if (!settings.enabled(kind, candidate.obj.payload)) continue
@@ -85,6 +95,15 @@ class AlertEngine(
 
         pruneFired()
         return alerts.sortedByDescending { it.kind.priority }.take(maxQueue)
+    }
+
+    private fun refreshHorizon(match: Match, speedMetersPerSecond: Double) {
+        lastHorizon = horizon.scan(match, speedMetersPerSecond)
+            .filter { candidate ->
+                val kind = candidate.obj.type.toAlertKind() ?: return@filter false
+                settings.enabled(kind, candidate.obj.payload)
+            }
+            .distinctBy { it.obj.nvdbId }
     }
 
     private fun shouldFire(kind: AlertKind, metersAhead: Double, speed: Double): Boolean {

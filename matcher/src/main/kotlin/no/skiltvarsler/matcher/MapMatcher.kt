@@ -15,6 +15,8 @@ class MapMatcher(
     private val switchSamplesRequired: Int = 4,
     private val deadReckonAccuracyMeters: Double = 28.0,
     private val headingAlignDegrees: Double = 55.0,
+    private val stayOnSequenceMeters: Double = 22.0,
+    private val headingTurnDegrees: Double = 40.0,
 ) {
     private var last: Match? = null
     private var lastTimeMs: Long = 0L
@@ -59,7 +61,7 @@ class MapMatcher(
         val sameSequence = best.link.sequenceId == previous.sequenceId &&
             best.direction == previous.direction
 
-        if (sameLink || sameSequence) {
+        if (sameLink || (sameSequence && best.distanceMeters <= stayOnSequenceMeters)) {
             last = best.toMatch()
             switchVotes = 0
             return last
@@ -68,10 +70,12 @@ class MapMatcher(
         val projected = deadReckon(previous, fix, dtSeconds)
         val projectedCost = projectedScore(projected, fix)
         val betterBy = projectedCost - best.cost
+        val headingTurned = headingTurnedAway(previous, fix)
+        val votesNeeded = if (headingTurned && betterBy > 8.0) 1 else switchSamplesRequired
 
-        if (betterBy > hysteresisMeters) {
+        if (betterBy > hysteresisMeters || (headingTurned && best.distanceMeters + 8.0 < projectedCost)) {
             switchVotes += 1
-            if (switchVotes >= switchSamplesRequired) {
+            if (switchVotes >= votesNeeded) {
                 last = best.toMatch()
                 switchVotes = 0
                 return last
@@ -82,6 +86,25 @@ class MapMatcher(
 
         last = projected
         return last
+    }
+
+    private fun headingTurnedAway(previous: Match, fix: GpsFix): Boolean {
+        val heading = fix.bearingDegrees ?: return false
+        val travel = travelBearing(previous) ?: return false
+        return Geo.headingDeltaDegrees(heading, travel) > headingTurnDegrees
+    }
+
+    private fun travelBearing(match: Match): Double? {
+        val link = graph.links[match.linkId] ?: return null
+        if (link.points.size < 2) {
+            return null
+        }
+        val along = Geo.bearingDegrees(link.points.first(), link.points.last())
+        return if (match.direction == TravelDirection.MED) {
+            along
+        } else {
+            (along + 180.0) % 360.0
+        }
     }
 
     private fun score(link: RoadLink, fix: GpsFix): Scored? {

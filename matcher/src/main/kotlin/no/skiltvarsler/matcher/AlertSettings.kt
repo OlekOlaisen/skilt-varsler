@@ -3,6 +3,7 @@ package no.skiltvarsler.matcher
 data class AlertSettings(
     val byId: Map<String, Boolean> = SignCatalog.all.associate { it.id to it.defaultEnabled },
     val categoryFallback: Map<String, Boolean> = emptyMap(),
+    val alertsMuted: Boolean = false,
 ) {
     fun enabled(kind: AlertKind, payload: String = ""): Boolean {
         val id = SignCatalog.optionId(kind, payload)

@@ -1,12 +1,14 @@
 package no.skiltvarsler.prefetch
 
 import android.content.Context
+import android.database.sqlite.SQLiteException
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
 import no.skiltvarsler.settings.SettingsStore
+import no.skiltvarsler.tilesource.AndroidTileLoader
 import no.skiltvarsler.tilesource.GraphHolder
 import no.skiltvarsler.tracking.LastAlertStore
 import org.json.JSONObject
@@ -25,39 +27,50 @@ class TilePrefetchWorker(
             return@withContext Result.success()
         }
         val cacheDir = File(applicationContext.filesDir, "tiles").apply { mkdirs() }
+        deleteStaleTempFiles(cacheDir)
         try {
-            LastAlertStore.setTileStatus("Henter kommune-flis…")
-            val manifestJson = JSONObject(downloadText("$base/manifest.json"))
-            val allTiles = TilePlanner.parseManifest(manifestJson)
-            val localManifest = File(cacheDir, "manifest.json")
             val latitude = LastAlertStore.latitude
             val longitude = LastAlertStore.longitude
             if (latitude == null || longitude == null) {
                 LastAlertStore.setTileStatus("Venter på GPS for å hente kommune-flis")
                 return@withContext Result.success()
             }
+            val manifestJson = JSONObject(downloadText("$base/manifest.json"))
+            val allTiles = TilePlanner.parseManifest(manifestJson)
+            val localManifest = File(cacheDir, "manifest.json")
             val needed = TilePlanner.containing(allTiles, latitude, longitude)
             val localVersions = readLocalVersions(localManifest)
             var downloaded = 0
             for (tile in needed) {
                 val target = File(cacheDir, tile.file)
-                val alreadyHave = target.exists() && localVersions[tile.id] == tile.version
-                if (alreadyHave) continue
-                val tmp = File(cacheDir, "${tile.file}.tmp")
-                downloadTo(tmp, "$base/${tile.file}")
-                if (target.exists()) target.delete()
-                if (!tmp.renameTo(target)) {
-                    tmp.copyTo(target, overwrite = true)
-                    tmp.delete()
+                val versionOk = localVersions[tile.id] == tile.version
+                if (target.exists() && !AndroidTileLoader.isReadable(target)) {
+                    target.delete()
                 }
+                if (target.exists() && versionOk && AndroidTileLoader.isReadable(target)) {
+                    continue
+                }
+                LastAlertStore.setTileStatus("Henter kommune-flis…")
+                downloadAtomically(target, "$base/${tile.file}")
                 downloaded += 1
             }
             localManifest.writeText(manifestJson.toString())
             val files = needed.map { File(cacheDir, it.file) }.filter { it.exists() }
-            if (files.isNotEmpty()) {
-                GraphHolder.loadNear(files, latitude, longitude)
-            } else {
+            if (files.isEmpty()) {
                 GraphHolder.clear()
+                LastAlertStore.setTileStatus(statusText(allTiles, files, downloaded, latitude, longitude))
+                return@withContext Result.success()
+            }
+            if (downloaded == 0 && GraphHolder.covers(files)) {
+                LastAlertStore.setTileStatus(statusText(allTiles, files, downloaded, latitude, longitude))
+                return@withContext Result.success()
+            }
+            try {
+                GraphHolder.loadNear(files, latitude, longitude)
+            } catch (error: SQLiteException) {
+                files.forEach { file -> file.delete() }
+                LastAlertStore.setTileStatus("Flisfeil: korrupt kommune-flis, henter på nytt")
+                return@withContext Result.retry()
             }
             LastAlertStore.setTileStatus(statusText(allTiles, files, downloaded, latitude, longitude))
             Result.success()
@@ -95,6 +108,42 @@ class TilePrefetchWorker(
             TilePlanner.parseManifest(JSONObject(manifestFile.readText())).associate { it.id to it.version }
         } catch (_: Exception) {
             emptyMap()
+        }
+    }
+
+    private fun deleteStaleTempFiles(cacheDir: File) {
+        cacheDir.listFiles { file -> file.name.endsWith(".tmp") }?.forEach { file ->
+            file.delete()
+        }
+    }
+
+    private fun downloadAtomically(target: File, url: String) {
+        val tmp = File(target.parentFile, "${target.name}.tmp")
+        if (tmp.exists()) {
+            tmp.delete()
+        }
+        try {
+            downloadTo(tmp, url)
+            if (!AndroidTileLoader.isReadable(tmp)) {
+                tmp.delete()
+                error("korrupt nedlasting av ${target.name}")
+            }
+            if (target.exists()) {
+                target.delete()
+            }
+            if (!tmp.renameTo(target)) {
+                tmp.copyTo(target, overwrite = true)
+                tmp.delete()
+            }
+            if (!AndroidTileLoader.isReadable(target)) {
+                target.delete()
+                error("korrupt kommune-flis etter lagring av ${target.name}")
+            }
+        } catch (error: Exception) {
+            if (tmp.exists()) {
+                tmp.delete()
+            }
+            throw error
         }
     }
 

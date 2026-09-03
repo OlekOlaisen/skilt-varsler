@@ -2,6 +2,7 @@ package no.skiltvarsler.ui
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -10,8 +11,10 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -21,6 +24,8 @@ fun SettingsScreen(
     tileUrlDraft: String,
     onTileUrlChange: (String) -> Unit,
     onSaveTileUrl: () -> Unit,
+    alertsMuted: Boolean,
+    onAlertsMutedChange: (Boolean) -> Unit,
 ) {
     Column(
         modifier = Modifier
@@ -49,6 +54,24 @@ fun SettingsScreen(
             Text("Lagre og hent fliser på nytt")
         }
         Text("Android Auto", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween,
+        ) {
+            Column(modifier = Modifier.weight(1f).padding(end = 12.dp)) {
+                Text("Varsler", style = MaterialTheme.typography.bodyLarge)
+                Text(
+                    "Slår av heads-up i bilen og på telefonen. Listen over kommende skilt vises fortsatt.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.secondary,
+                )
+            }
+            Switch(
+                checked = !alertsMuted,
+                onCheckedChange = { enabled -> onAlertsMutedChange(!enabled) },
+            )
+        }
         Text(
             "Appen er sideloadet. I Android Auto-innstillinger på telefonen: slå på utviklerinnstillinger, tillat ukjente kilder, koble til bilen, og pin Skilt-varsler under Tilpass startside.",
             style = MaterialTheme.typography.bodyMedium,

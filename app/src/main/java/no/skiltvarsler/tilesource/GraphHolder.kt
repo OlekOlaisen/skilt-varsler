@@ -23,6 +23,14 @@ object GraphHolder {
 
     fun isReady(): Boolean = current().links.isNotEmpty()
 
+    fun covers(files: List<File>): Boolean {
+        if (!isReady() || files.isEmpty()) {
+            return false
+        }
+        val expected = files.map { it.nameWithoutExtension }.sorted().joinToString("+")
+        return current().tileId == expected
+    }
+
     fun replace(next: RoadGraph) {
         graph.set(next)
     }

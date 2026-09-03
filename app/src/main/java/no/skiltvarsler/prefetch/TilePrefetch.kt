@@ -20,7 +20,7 @@ object TilePrefetch {
             .build()
         WorkManager.getInstance(context).enqueueUniqueWork(
             UNIQUE_NOW,
-            ExistingWorkPolicy.REPLACE,
+            ExistingWorkPolicy.KEEP,
             request,
         )
     }

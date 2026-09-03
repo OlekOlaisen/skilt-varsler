@@ -23,7 +23,11 @@ class SettingsStore(private val context: Context) {
             val stored = prefs[booleanPreferencesKey(signKey(sign.id))]
             sign.id to (stored ?: categoryFallback[sign.categoryKey] ?: sign.defaultEnabled)
         }
-        AlertSettings(byId = byId, categoryFallback = categoryFallback)
+        AlertSettings(
+            byId = byId,
+            categoryFallback = categoryFallback,
+            alertsMuted = prefs[Keys.alertsMuted] ?: false,
+        )
     }
 
     val tileBaseUrl: Flow<String> = context.dataStore.data.map { prefs ->
@@ -44,6 +48,12 @@ class SettingsStore(private val context: Context) {
         }
     }
 
+    suspend fun setAlertsMuted(muted: Boolean) {
+        context.dataStore.edit { prefs ->
+            prefs[Keys.alertsMuted] = muted
+        }
+    }
+
     suspend fun setTileBaseUrl(url: String) {
         context.dataStore.edit { prefs ->
             prefs[Keys.tileBaseUrl] = url
@@ -52,6 +62,7 @@ class SettingsStore(private val context: Context) {
 
     private object Keys {
         val tileBaseUrl = stringPreferencesKey("tileBaseUrl")
+        val alertsMuted = booleanPreferencesKey("alertsMuted")
     }
 
     companion object {
