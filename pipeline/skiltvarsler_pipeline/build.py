@@ -6,10 +6,12 @@ from pathlib import Path
 
 from .changelog import kommuner_of_object
 from .coords import parse_wkt_polygon
-from .model import KommunePolygon, TileGraph
+from .model import KommunePolygon, RoadObject, TileGraph
 from .nvdb import NvdbClient
 from .objects import (
+    collect_tunnels,
     drop_skilt_stop_yield_if_regulering_exists,
+    enrich_tunnel_signs,
     ingest_fartsgrense,
     ingest_skiltplate,
     ingest_trafikkreguleringer,
@@ -19,8 +21,8 @@ from .sanitize import sanitize
 from .tile import write_tile
 from .vegnett import ingest_sequences
 
-OBJECT_TYPES = (162, 823, 45, 291, 100, 64, 770, 596, 96, 856)
-CHANGELOG_TYPES = (105, 162, 823, 45, 291, 100, 64, 96, 856)
+OBJECT_TYPES = (162, 823, 45, 291, 100, 64, 770, 596, 67, 96, 856)
+CHANGELOG_TYPES = (105, 162, 823, 45, 291, 100, 64, 67, 96, 856)
 
 
 def bbox_of(graph: TileGraph) -> dict[str, float]:
@@ -90,17 +92,21 @@ def build_kommune(
         ingest_sequences(graph, sequences)
         ingest_fartsgrense(graph, client.iter_vegobjekter(105, kommune))
         regulering_hits = 0
+        tunnels: list[RoadObject] = []
         for type_id in OBJECT_TYPES:
             if type_id == 96 and not include_signs:
                 continue
             objects = list(client.iter_vegobjekter(type_id, kommune))
-            if type_id == 96:
+            if type_id == 67:
+                tunnels.extend(collect_tunnels(graph, objects))
+            elif type_id == 96:
                 ingest_skiltplate(graph, objects)
             elif type_id == 856:
                 regulering_hits = ingest_trafikkreguleringer(graph, objects)
             else:
                 ingest_typed(graph, type_id, objects)
         drop_skilt_stop_yield_if_regulering_exists(graph, regulering_hits > 0)
+        enrich_tunnel_signs(graph, tunnels)
         attach_kommune_polygon(graph, client, kommune)
     sanitize(graph)
     output_dir.mkdir(parents=True, exist_ok=True)
