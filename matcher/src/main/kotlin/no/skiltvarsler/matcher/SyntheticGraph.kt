@@ -143,6 +143,99 @@ object SyntheticGraph {
         return builder.build()
     }
 
+    const val SEQ_MAIN = 400L
+    const val SEQ_SIDE = 401L
+    const val SEQ_CONTINUE = 402L
+    const val SIDE_HAZARD_ID = 910001L
+    const val CONTINUE_HAZARD_ID = 910002L
+    const val MAIN_LENGTH_METERS = 400.0
+    const val SIDE_LENGTH_METERS = 300.0
+
+    fun mainRoadWithSideStreet(): RoadGraph {
+        val junction = Geo.offsetMeters(origin, northMeters = MAIN_LENGTH_METERS, eastMeters = 0.0)
+        val northEnd = Geo.offsetMeters(junction, northMeters = MAIN_LENGTH_METERS, eastMeters = 0.0)
+        val eastEnd = Geo.offsetMeters(junction, northMeters = 0.0, eastMeters = SIDE_LENGTH_METERS)
+        val builder = RoadGraphBuilder().apply {
+            tileId = "fixture-main-side"
+            version = "test"
+        }
+        builder.addNode(RoadNode(1, origin))
+        builder.addNode(RoadNode(2, junction))
+        builder.addNode(RoadNode(3, northEnd))
+        builder.addNode(RoadNode(4, eastEnd))
+        builder.addLink(
+            RoadLink(
+                id = 40,
+                sequenceId = SEQ_MAIN,
+                linkNumber = 1,
+                startNodeId = 1,
+                endNodeId = 2,
+                startPos = 0.0,
+                endPos = 1.0,
+                lengthMeters = MAIN_LENGTH_METERS,
+                typeVeg = "Enkel bilveg",
+                matchable = true,
+                points = dense(origin, junction),
+            ),
+        )
+        builder.addLink(
+            RoadLink(
+                id = 41,
+                sequenceId = SEQ_CONTINUE,
+                linkNumber = 1,
+                startNodeId = 2,
+                endNodeId = 3,
+                startPos = 0.0,
+                endPos = 1.0,
+                lengthMeters = MAIN_LENGTH_METERS,
+                typeVeg = "Enkel bilveg",
+                matchable = true,
+                points = dense(junction, northEnd),
+            ),
+        )
+        builder.addLink(
+            RoadLink(
+                id = 42,
+                sequenceId = SEQ_SIDE,
+                linkNumber = 1,
+                startNodeId = 2,
+                endNodeId = 4,
+                startPos = 0.0,
+                endPos = 1.0,
+                lengthMeters = SIDE_LENGTH_METERS,
+                typeVeg = "Enkel bilveg",
+                matchable = true,
+                points = dense(junction, eastEnd),
+            ),
+        )
+        builder.setSequenceLength(SEQ_MAIN, MAIN_LENGTH_METERS)
+        builder.setSequenceLength(SEQ_CONTINUE, MAIN_LENGTH_METERS)
+        builder.setSequenceLength(SEQ_SIDE, SIDE_LENGTH_METERS)
+        builder.addObject(
+            RoadObject(
+                nvdbId = SIDE_HAZARD_ID,
+                type = RoadObjectType.HAZARD,
+                sequenceId = SEQ_SIDE,
+                fromPos = 80.0 / SIDE_LENGTH_METERS,
+                toPos = 80.0 / SIDE_LENGTH_METERS,
+                direction = TravelDirection.MED,
+                payload = "106.1",
+            ),
+        )
+        builder.addObject(
+            RoadObject(
+                nvdbId = CONTINUE_HAZARD_ID,
+                type = RoadObjectType.HAZARD,
+                sequenceId = SEQ_CONTINUE,
+                fromPos = 80.0 / MAIN_LENGTH_METERS,
+                toPos = 80.0 / MAIN_LENGTH_METERS,
+                direction = TravelDirection.MED,
+                payload = "108",
+            ),
+        )
+        return builder.build()
+    }
+
     private fun dense(from: LatLon, to: LatLon, steps: Int = 20): List<LatLon> {
         return (0..steps).map { step ->
             Geo.interpolate(from, to, step.toDouble() / steps)

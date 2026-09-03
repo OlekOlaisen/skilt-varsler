@@ -1,5 +1,6 @@
 package no.skiltvarsler.tracking
 
+import no.skiltvarsler.log.DebugLog
 import no.skiltvarsler.matcher.Alert
 import java.util.concurrent.atomic.AtomicReference
 
@@ -14,6 +15,8 @@ object LastAlertStore {
         private set
     @Volatile var bearingDegrees: Double? = null
         private set
+    @Volatile var trackingActive: Boolean = false
+        private set
 
     fun update(alert: Alert) {
         last.set(alert)
@@ -23,6 +26,13 @@ object LastAlertStore {
 
     fun setTracking(status: String) {
         tracking.set(status)
+    }
+
+    fun setTrackingActive(active: Boolean) {
+        trackingActive = active
+        if (!active && tracking.get() == "Starter sporing") {
+            tracking.set("Stoppet")
+        }
     }
 
     fun trackingStatus(): String = tracking.get()
@@ -35,6 +45,7 @@ object LastAlertStore {
 
     fun setTileStatus(status: String) {
         tile.set(status)
+        DebugLog.append("TILE $status")
     }
 
     fun tileStatus(): String = tile.get()

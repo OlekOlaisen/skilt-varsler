@@ -42,6 +42,7 @@ class MainActivity : ComponentActivity() {
                     onStartTracking = ::startTracking,
                     onStopTracking = ::stopTracking,
                     onReplay = ::startReplay,
+                    onEnsureNotifications = ::requestNotificationPermission,
                 )
             }
         }
@@ -64,14 +65,18 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun startReplay() {
+        requestNotificationPermission()
+        lifecycleScope.launch {
+            ReplayRunner.run(applicationContext)
+        }
+    }
+
+    private fun requestNotificationPermission() {
         if (Build.VERSION.SDK_INT >= 33 &&
             ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) !=
             PackageManager.PERMISSION_GRANTED
         ) {
             notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
-        }
-        lifecycleScope.launch {
-            ReplayRunner.run(applicationContext)
         }
     }
 

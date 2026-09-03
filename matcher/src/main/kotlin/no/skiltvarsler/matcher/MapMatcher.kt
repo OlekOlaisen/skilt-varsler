@@ -122,10 +122,11 @@ class MapMatcher(
 
     private fun deadReckon(previous: Match, fix: GpsFix, dtSeconds: Double): Match {
         val sequence = graph.sequences[previous.sequenceId] ?: return previous
-        val speed = if (fix.speedMetersPerSecond > 0.5) {
-            fix.speedMetersPerSecond
-        } else {
-            8.0
+        val speed = fix.speedMetersPerSecond
+        if (speed <= 0.5) {
+            return previous.copy(
+                distanceToLinkMeters = Geo.distanceMeters(fix.position, previous.snapped),
+            )
         }
         val deltaMeters = speed * dtSeconds
         val deltaPos = if (sequence.lengthMeters <= 0.0) 0.0 else deltaMeters / sequence.lengthMeters

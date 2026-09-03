@@ -6,7 +6,7 @@ import no.skiltvarsler.tiles.TravelDirection
 
 class AlertEngine(
     graph: RoadGraph,
-    private val settings: AlertSettings = AlertSettings.ALL_ON,
+    private var settings: AlertSettings = AlertSettings.ALL_ON,
     private val maxQueue: Int = 2,
 ) {
     private val matcher = MapMatcher(graph)
@@ -17,6 +17,10 @@ class AlertEngine(
     private var lastKommune: Int? = null
     private var lastInsideWildlife = HashSet<Long>()
     private var lastInsideSectionAtk = HashSet<Long>()
+
+    fun updateSettings(next: AlertSettings) {
+        settings = next
+    }
 
     fun reset() {
         matcher.reset()
@@ -31,31 +35,37 @@ class AlertEngine(
 
     fun update(fix: GpsFix): List<Alert> {
         val match = matcher.update(fix) ?: return emptyList()
-        val speed = fix.speedMetersPerSecond.coerceAtLeast(5.0)
+        val speed = fix.speedMetersPerSecond
+        val driving = speed >= AlertWindows.MIN_DRIVING_SPEED_METERS_PER_SECOND
         val alerts = ArrayList<Alert>()
 
-        collectSpeedLimit(match)?.let { alerts.add(it) }
-        collectKommune(match)?.let { alerts.add(it) }
+        collectSpeedLimit(match, driving)?.let { alerts.add(it) }
+        collectKommune(match, driving)?.let { alerts.add(it) }
         collectIntervalEntries(
             match,
             lastInsideWildlife,
             RoadObjectType.WILDLIFE,
             AlertKind.WILDLIFE,
-            "Viltfare",
+            driving,
         )?.let { alerts.add(it) }
         collectIntervalEntries(
             match,
             lastInsideSectionAtk,
             RoadObjectType.SECTION_ATK,
             AlertKind.SECTION_ATK_START,
-            "Streknings-ATK",
+            driving,
         )?.let { alerts.add(it) }
-        collectSectionAtkExit(match)?.let { alerts.add(it) }
+        collectSectionAtkExit(match, driving)?.let { alerts.add(it) }
+
+        if (!driving) {
+            pruneFired()
+            return alerts
+        }
 
         for (candidate in horizon.scan(match, speed)) {
             val kind = candidate.obj.type.toAlertKind() ?: continue
             if (kind == AlertKind.WILDLIFE || kind == AlertKind.SECTION_ATK_START) continue
-            if (!settings.enabled(kind)) continue
+            if (!settings.enabled(kind, candidate.obj.payload)) continue
             if (!shouldFire(kind, candidate.metersAhead, speed)) continue
             val key = fireKey(kind, candidate.obj.nvdbId)
             if (!fired.add(key)) continue
@@ -64,8 +74,8 @@ class AlertEngine(
                     kind = kind,
                     nvdbId = candidate.obj.nvdbId,
                     metersAhead = candidate.metersAhead,
-                    title = titleFor(kind, candidate.obj.payload),
-                    body = bodyFor(kind, candidate.metersAhead),
+                    title = AlertCopy.titleFor(kind, candidate.obj.payload),
+                    body = AlertCopy.bodyFor(kind, candidate.metersAhead, candidate.obj.payload),
                     sequenceId = candidate.obj.sequenceId,
                     objectType = candidate.obj.type,
                     payload = candidate.obj.payload,
@@ -84,13 +94,13 @@ class AlertEngine(
         return AlertWindows.inWindow(kind, metersAhead, speed)
     }
 
-    private fun collectKommune(match: Match): Alert? {
+    private fun collectKommune(match: Match, driving: Boolean): Alert? {
         if (!settings.enabled(AlertKind.MUNICIPALITY)) return null
         val kommune = graph.links[match.linkId]?.kommune ?: 0
         if (kommune == 0) return null
         val previous = lastKommune
         lastKommune = kommune
-        if (previous == null || previous == kommune) return null
+        if (!driving || previous == null || previous == kommune) return null
         val name = graph.kommunePolygons.firstOrNull { it.kommune == kommune }?.name ?: kommune.toString()
         val key = "MUNICIPALITY:$kommune"
         if (!fired.add(key)) return null
@@ -106,12 +116,12 @@ class AlertEngine(
         )
     }
 
-    private fun collectSpeedLimit(match: Match): Alert? {
-        if (!settings.enabled(AlertKind.SPEED_LIMIT)) return null
+    private fun collectSpeedLimit(match: Match, driving: Boolean): Alert? {
         val kmh = graph.speedAt(match.sequenceId, match.position, match.direction) ?: return null
         val previous = lastSpeedKmh
         lastSpeedKmh = kmh
-        if (previous == null || previous == kmh) return null
+        if (!driving || previous == null || previous == kmh) return null
+        if (!settings.enabled(AlertKind.SPEED_LIMIT, kmh.toString())) return null
         val key = "SPEED_LIMIT:$kmh:${match.sequenceId}:${(match.position * 100).toInt()}"
         if (!fired.add(key)) return null
         return Alert(
@@ -131,9 +141,8 @@ class AlertEngine(
         previousIds: HashSet<Long>,
         type: RoadObjectType,
         kind: AlertKind,
-        title: String,
+        driving: Boolean,
     ): Alert? {
-        if (!settings.enabled(kind)) return null
         val inside = HashSet<Long>()
         var entered: Alert? = null
         for (obj in graph.objectsOn(match.sequenceId)) {
@@ -143,15 +152,16 @@ class AlertEngine(
             val hi = maxOf(obj.fromPos, obj.toPos)
             if (match.position + 1e-9 < lo || match.position - 1e-9 > hi) continue
             inside.add(obj.nvdbId)
-            if (obj.nvdbId !in previousIds) {
+            if (!settings.enabled(kind, obj.payload)) continue
+            if (driving && obj.nvdbId !in previousIds) {
                 val key = fireKey(kind, obj.nvdbId)
                 if (fired.add(key) && entered == null) {
                     entered = Alert(
                         kind = kind,
                         nvdbId = obj.nvdbId,
                         metersAhead = 0.0,
-                        title = title,
-                        body = SignLabel.displayName(obj.payload, title),
+                        title = AlertCopy.titleFor(kind, obj.payload),
+                        body = AlertCopy.bodyFor(kind, 0.0, obj.payload),
                         sequenceId = obj.sequenceId,
                         objectType = type,
                         payload = obj.payload,
@@ -164,8 +174,8 @@ class AlertEngine(
         return entered
     }
 
-    private fun collectSectionAtkExit(match: Match): Alert? {
-        if (!settings.enabled(AlertKind.SECTION_ATK_END)) return null
+    private fun collectSectionAtkExit(match: Match, driving: Boolean): Alert? {
+        if (!driving || !settings.enabled(AlertKind.SECTION_ATK_END)) return null
         val sequence = graph.sequences[match.sequenceId] ?: return null
         for (obj in graph.objectsOn(match.sequenceId)) {
             if (obj.type != RoadObjectType.SECTION_ATK) continue
@@ -183,8 +193,8 @@ class AlertEngine(
                 kind = AlertKind.SECTION_ATK_END,
                 nvdbId = obj.nvdbId,
                 metersAhead = meters,
-                title = "Slutt streknings-ATK",
-                body = "Hold snittfarten",
+                title = AlertCopy.titleFor(AlertKind.SECTION_ATK_END, obj.payload),
+                body = AlertCopy.bodyFor(AlertKind.SECTION_ATK_END, meters, obj.payload),
                 sequenceId = obj.sequenceId,
                 objectType = RoadObjectType.SECTION_ATK,
                 payload = obj.payload,
@@ -205,28 +215,4 @@ class AlertEngine(
     }
 
     private fun fireKey(kind: AlertKind, nvdbId: Long) = "$kind:$nvdbId"
-
-    private fun titleFor(kind: AlertKind, payload: String): String = when (kind) {
-        AlertKind.SPEED_CAMERA -> "Fotoboks"
-        AlertKind.TOLL -> "Bomstasjon"
-        AlertKind.RAILWAY -> "Jernbane"
-        AlertKind.FERRY -> "Ferje"
-        AlertKind.STOP -> "Stopp"
-        AlertKind.YIELD -> "Vikeplikt"
-        AlertKind.HAZARD -> SignLabel.displayName(payload, "Fareskilt")
-        AlertKind.MUNICIPALITY -> SignLabel.displayName(payload, "Kommunegrense")
-        AlertKind.PRIORITY_ROAD -> "Forkjørsveg"
-        AlertKind.SECTION_ATK_START -> "Streknings-ATK"
-        AlertKind.SECTION_ATK_END -> "Slutt streknings-ATK"
-        AlertKind.WILDLIFE -> "Viltfare"
-        AlertKind.SPEED_LIMIT -> payload
-    }
-
-    private fun bodyFor(kind: AlertKind, metersAhead: Double): String {
-        val meters = metersAhead.toInt()
-        return when (kind) {
-            AlertKind.STOP, AlertKind.YIELD -> "Ved skiltet"
-            else -> "Om $meters m"
-        }
-    }
 }

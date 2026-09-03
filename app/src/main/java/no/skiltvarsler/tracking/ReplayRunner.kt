@@ -5,6 +5,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
+import no.skiltvarsler.log.DebugLog
 import no.skiltvarsler.matcher.AlertEngine
 import no.skiltvarsler.matcher.AlertKind
 import no.skiltvarsler.matcher.Replay
@@ -17,6 +18,7 @@ object ReplayRunner {
     suspend fun run(context: Context) {
         try {
             LastAlertStore.setTracking("Replay E6 nord")
+            DebugLog.append("REPLAY start E6 nord")
             val settings = SettingsStore(context).settings.first()
             val graph = SyntheticGraph.e6VestbyLike()
             val engine = AlertEngine(graph, settings)
@@ -44,11 +46,15 @@ object ReplayRunner {
                 .alertsOf(AlertKind.SPEED_CAMERA)
             if (cameras.isEmpty()) {
                 LastAlertStore.setTracking("Replay ferdig — ingen fotoboks")
+                DebugLog.append("REPLAY done cameras=0")
             } else {
                 LastAlertStore.setTracking("Replay ferdig — fotoboks ${cameras.first().nvdbId}")
+                DebugLog.append("REPLAY done cameras=${cameras.size} first=${cameras.first().nvdbId}")
             }
         } catch (error: Exception) {
-            LastAlertStore.setTracking("Replay feilet: ${error.message ?: error.javaClass.simpleName}")
+            val message = "Replay feilet: ${error.message ?: error.javaClass.simpleName}"
+            LastAlertStore.setTracking(message)
+            DebugLog.append("REPLAY $message")
         }
     }
 }

@@ -6,6 +6,7 @@ import androidx.work.ExistingPeriodicWorkPolicy
 import androidx.work.NetworkType
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
+import no.skiltvarsler.log.DebugLog
 import no.skiltvarsler.prefetch.TilePrefetchWorker
 import no.skiltvarsler.tilesource.GraphHolder
 import no.skiltvarsler.tracking.AlertNotifier
@@ -17,6 +18,7 @@ class SkiltApp : Application() {
     override fun onCreate() {
         super.onCreate()
         AlertNotifier.ensureChannels(this)
+        DebugLog.init(this)
         GraphHolder.loadFromCache(File(filesDir, "tiles"))
         LastAlertStore.setTileStatus("Klar. Start for å hente kommune-flis.")
         val manager = WorkManager.getInstance(this)

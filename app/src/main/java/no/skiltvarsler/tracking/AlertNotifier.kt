@@ -8,6 +8,8 @@ import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
+import android.view.View
+import android.widget.RemoteViews
 import androidx.car.app.notification.CarAppExtender
 import androidx.car.app.notification.CarNotificationManager
 import androidx.car.app.notification.CarPendingIntent
@@ -18,6 +20,7 @@ import androidx.core.app.RemoteInput
 import androidx.core.graphics.drawable.IconCompat
 import no.skiltvarsler.MainActivity
 import no.skiltvarsler.R
+import no.skiltvarsler.log.DebugLog
 import no.skiltvarsler.car.CarMessageActionService
 import no.skiltvarsler.car.SkiltCarAppService
 import no.skiltvarsler.matcher.Alert
@@ -81,13 +84,15 @@ object AlertNotifier {
 
     fun publishAlert(context: Context, alert: Alert) {
         LastAlertStore.update(alert)
+        DebugLog.appendAlert(alert)
         val icon = iconRes(alert.kind)
-        val sign = SignRenderer.bitmap(context, alert, 256)
+        val titleText = alert.title
+        val subtitleText = alert.body
+        val sign = SignRenderer.bitmap(context, alert, 192)
         val builder = NotificationCompat.Builder(context, CHANNEL_ALERT)
             .setSmallIcon(icon)
-            .setContentTitle(alert.title)
-            .setContentText(alert.body)
-            .setStyle(messagingStyle(context, alert, sign))
+            .setContentTitle(titleText)
+            .setContentText(subtitleText.ifBlank { null })
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setCategory(NotificationCompat.CATEGORY_MESSAGE)
             .setOnlyAlertOnce(true)
@@ -95,13 +100,18 @@ object AlertNotifier {
             .setShowWhen(false)
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
             .setContentIntent(phoneContentIntent(context))
-            .setTimeoutAfter(8_000)
             .addAction(replyAction(context))
             .addAction(markAsReadAction(context))
         if (sign != null) {
-            builder.setLargeIcon(sign)
+            val customView = alertRemoteViews(context, titleText, subtitleText, sign)
+            builder
+                .setStyle(messagingStyleFor(context, titleText, subtitleText, sign))
+                .setLargeIcon(sign)
+                .setCustomContentView(customView)
+                .setCustomBigContentView(customView)
+                .setCustomHeadsUpContentView(customView)
         }
-        builder.extend(carAppExtender(context, alert, icon, sign))
+        builder.extend(carAppExtender(context, titleText, subtitleText, icon, sign))
         try {
             CarNotificationManager.from(context).notify(ALERT_NOTIFICATION_ID, builder)
         } catch (_: Exception) {
@@ -109,46 +119,70 @@ object AlertNotifier {
         }
     }
 
-    private fun messagingStyle(
+    private fun alertRemoteViews(
         context: Context,
-        alert: Alert,
-        sign: Bitmap?,
+        titleText: String,
+        subtitleText: String,
+        sign: Bitmap,
+    ): RemoteViews {
+        return RemoteViews(context.packageName, R.layout.notification_alert).apply {
+            setImageViewBitmap(R.id.notification_sign, sign)
+            setTextViewText(R.id.notification_title, titleText)
+            if (subtitleText.isBlank()) {
+                setViewVisibility(R.id.notification_subtitle, View.GONE)
+            } else {
+                setViewVisibility(R.id.notification_subtitle, View.VISIBLE)
+                setTextViewText(R.id.notification_subtitle, subtitleText)
+            }
+        }
+    }
+
+    private fun messagingStyleFor(
+        context: Context,
+        titleText: String,
+        subtitleText: String,
+        sign: Bitmap,
     ): NotificationCompat.MessagingStyle {
+        val signIcon = IconCompat.createWithBitmap(sign)
         val driver = Person.Builder()
             .setName(context.getString(R.string.app_name))
             .setKey("driver")
             .build()
-        val senderBuilder = Person.Builder()
-            .setName(alert.title)
+        val hasSubtitle = subtitleText.isNotBlank()
+        val sender = Person.Builder()
+            .setName(if (hasSubtitle) context.getString(R.string.app_name) else titleText)
             .setKey("skilt-varsler")
+            .setIcon(signIcon)
             .setImportant(true)
-        if (sign != null) {
-            senderBuilder.setIcon(IconCompat.createWithBitmap(sign))
-        }
-        return NotificationCompat.MessagingStyle(driver)
+            .build()
+        val style = NotificationCompat.MessagingStyle(driver)
             .setGroupConversation(false)
-            .addMessage(
-                NotificationCompat.MessagingStyle.Message(
-                    alert.body.ifBlank { "\u200B" },
-                    System.currentTimeMillis(),
-                    senderBuilder.build(),
-                ),
-            )
+        if (hasSubtitle) {
+            style.setConversationTitle(titleText)
+        }
+        style.addMessage(
+            NotificationCompat.MessagingStyle.Message(
+                if (hasSubtitle) subtitleText else "\u200B",
+                System.currentTimeMillis(),
+                sender,
+            ),
+        )
+        return style
     }
 
     private fun carAppExtender(
         context: Context,
-        alert: Alert,
+        titleText: String,
+        subtitleText: String,
         icon: Int,
         sign: Bitmap?,
     ): CarAppExtender {
-        val openCar = carAppContentIntent(context)
         val extender = CarAppExtender.Builder()
-            .setContentTitle(alert.title)
-            .setContentText(alert.body)
+            .setContentTitle(titleText)
+            .setContentText(subtitleText)
             .setSmallIcon(icon)
             .setImportance(NotificationManager.IMPORTANCE_HIGH)
-            .setContentIntent(openCar)
+            .setContentIntent(carAppContentIntent(context))
         if (sign != null) {
             extender.setLargeIcon(sign)
         }

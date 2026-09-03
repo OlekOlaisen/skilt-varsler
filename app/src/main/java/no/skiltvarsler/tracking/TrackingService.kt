@@ -20,6 +20,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
+import no.skiltvarsler.log.DebugLog
 import no.skiltvarsler.matcher.AlertEngine
 import no.skiltvarsler.matcher.AlertSettings
 import no.skiltvarsler.matcher.GpsFix
@@ -78,9 +79,9 @@ class TrackingService : Service() {
                     try {
                         ReplayRunner.run(this@TrackingService)
                     } catch (error: Exception) {
-                        LastAlertStore.setTracking(
-                            "Replay feilet: ${error.message ?: error.javaClass.simpleName}",
-                        )
+                        val message = "Replay feilet: ${error.message ?: error.javaClass.simpleName}"
+                        LastAlertStore.setTracking(message)
+                        DebugLog.append("REPLAY $message")
                     }
                 }
                 return START_STICKY
@@ -95,6 +96,8 @@ class TrackingService : Service() {
 
     private fun startForegroundDriving() {
         LastAlertStore.setTracking("Starter sporing")
+        LastAlertStore.setTrackingActive(true)
+        DebugLog.append("TRACKING start")
         val notification = AlertNotifier.drivingNotification(this)
         try {
             if (android.os.Build.VERSION.SDK_INT >= 34) {
@@ -108,6 +111,8 @@ class TrackingService : Service() {
             }
         } catch (error: SecurityException) {
             LastAlertStore.setTracking("Kan ikke starte sporing: ${error.message}")
+            LastAlertStore.setTrackingActive(false)
+            DebugLog.append("TRACKING start failed: ${error.message}")
             stopSelf()
         }
     }
@@ -115,6 +120,12 @@ class TrackingService : Service() {
     @SuppressLint("MissingPermission")
     private suspend fun startTracking() {
         alertSettings = SettingsStore(applicationContext).settings.first()
+        scope.launch(Dispatchers.Default) {
+            SettingsStore(applicationContext).settings.collect { next ->
+                alertSettings = next
+                engine?.updateSettings(next)
+            }
+        }
         engineForCurrentGraph()
         seedLastLocation()
         if (LastAlertStore.latitude != null) {
@@ -152,6 +163,7 @@ class TrackingService : Service() {
             else -> "Lenke ${match.sequenceId}  pos ${"%.3f".format(match.position)}"
         }
         LastAlertStore.setTracking(status)
+        DebugLog.appendFix(fix, match, LastAlertStore.tileStatus())
         withContext(Dispatchers.Main.immediate) {
             alerts.forEach { AlertNotifier.publishAlert(this@TrackingService, it) }
         }
@@ -161,10 +173,15 @@ class TrackingService : Service() {
         val settings = alertSettings ?: return engine
         val identity = GraphHolder.identity()
         val existing = engine
-        if (existing != null && graphIdentity == identity) return existing
+        if (existing != null && graphIdentity == identity) {
+            existing.updateSettings(settings)
+            return existing
+        }
         val next = AlertEngine(GraphHolder.current(), settings)
         engine = next
         graphIdentity = identity
+        val graph = GraphHolder.current()
+        DebugLog.append("GRAPH $identity links=${graph.links.size}")
         return next
     }
 
@@ -216,6 +233,9 @@ class TrackingService : Service() {
     override fun onDestroy() {
         fused.removeLocationUpdates(callback)
         scope.cancel()
+        LastAlertStore.setTrackingActive(false)
+        LastAlertStore.setTracking("Stoppet")
+        DebugLog.append("TRACKING stop")
         super.onDestroy()
     }
 

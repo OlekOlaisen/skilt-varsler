@@ -17,11 +17,13 @@ import kotlin.math.min
 
 object SignRenderer {
     private const val ASSET_DIR = "trafikkskilt"
-    private val cache = LruCache<String, Bitmap>(48)
+    private val cache = LruCache<String, Bitmap>(96)
     private val doctype = Regex("""<!DOCTYPE[^>]*>""", RegexOption.IGNORE_CASE)
     private val pageGroup = Regex(
         """<g id="#(?:ffffffff|d0d0d0ff|fbe7e5ff|fffdfdff|fffdfeff)">[\s\S]*?</g>""",
     )
+    private val pathTag = Regex("""<path\b""")
+    private const val pageCornerPathLimit = 4
     private val svgOpen = Regex("""<svg\b([^>]*)>""", RegexOption.IGNORE_CASE)
     private val viewBoxAttr = Regex("""viewBox\s*=\s*"([^"]+)"""", RegexOption.IGNORE_CASE)
     private val widthAttr = Regex("""\bwidth\s*=\s*"([0-9.]+)""", RegexOption.IGNORE_CASE)
@@ -74,12 +76,25 @@ object SignRenderer {
 
     private fun prepareSvg(raw: String): String {
         var text = doctype.replace(raw, "")
-        text = pageGroup.replace(text, "")
+        text = stripPageBackdrop(text)
         return svgOpen.replace(text) { match ->
             val attributes = match.groupValues[1]
             val viewBox = viewBoxAttr.find(attributes)?.groupValues?.get(1)
                 ?: viewBoxFromWidthHeight(attributes)
             """<svg xmlns="http://www.w3.org/2000/svg" version="1.1" width="100%" height="100%" viewBox="$viewBox" fill-rule="evenodd">"""
+        }
+    }
+
+    /**
+     * Tracer SVGs put the paper around the sign in a near-white group.
+     * Some signs (streknings-ATK 556.2) also put the white graphics in
+     * that same group — those have many paths and must be kept.
+     */
+    private fun stripPageBackdrop(svg: String): String {
+        return pageGroup.replace(svg) { match ->
+            val group = match.value
+            val pathCount = pathTag.findAll(group).count()
+            if (pathCount > pageCornerPathLimit) group else ""
         }
     }
 

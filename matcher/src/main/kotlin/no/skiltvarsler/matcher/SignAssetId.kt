@@ -26,14 +26,20 @@ object SignAssetId {
         candidates(alert.kind, alert.payload, alert.nvdbId)
 
     fun candidates(kind: AlertKind, payload: String, nvdbId: Long): List<String> {
-        val payloadStems = stemsFromPayload(payload)
         val kindStems = stemsForKind(kind, payload, nvdbId)
+        val payloadStems = if (kind == AlertKind.SPEED_LIMIT) {
+            emptyList()
+        } else {
+            stemsFromPayload(payload)
+        }
         val ordered = when (kind) {
-            AlertKind.HAZARD, AlertKind.WILDLIFE, AlertKind.SPEED_LIMIT, AlertKind.RAILWAY ->
+            AlertKind.HAZARD, AlertKind.WILDLIFE, AlertKind.RAILWAY ->
                 payloadStems + kindStems
             else -> kindStems + payloadStems
         }
-        return ordered.distinct().map { "$it.svg" }
+        return ordered.flatMap { stem ->
+            listOf(stem) + namedFallbacks[stem].orEmpty()
+        }.distinct().map { "$it.svg" }
     }
 
     private fun stemsFromPayload(payload: String): List<String> {
@@ -88,6 +94,14 @@ object SignAssetId {
             AlertKind.MUNICIPALITY -> emptyList()
         }
     }
+
+    private val namedFallbacks = mapOf(
+        "100_1" to listOf("skarp-sving-til-hoeyre"),
+        "100_2" to listOf("farlig-sving-til-venstre"),
+        "102_1" to listOf("farlige-svinger-den-foerste-til-hoeyre"),
+        "153" to listOf("153_0", "trafikkulykke"),
+        "153_0" to listOf("trafikkulykke"),
+    )
 
     private fun speedLimitStem(payload: String, nvdbId: Long): String {
         val fromPayload = payload.trim().toIntOrNull()

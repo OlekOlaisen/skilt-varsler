@@ -1,6 +1,9 @@
 package no.skiltvarsler.matcher
 
 object AlertWindows {
+    /** Below this, GPS heading is noise and the driver is not approaching signs. */
+    const val MIN_DRIVING_SPEED_METERS_PER_SECOND = 1.5
+
     data class Window(
         val seconds: Double,
         val minMeters: Double,
