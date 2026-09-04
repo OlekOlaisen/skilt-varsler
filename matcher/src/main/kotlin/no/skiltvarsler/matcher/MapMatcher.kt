@@ -10,7 +10,7 @@ import kotlin.math.abs
 import kotlin.math.max
 
 class MapMatcher(
-    private val graph: RoadGraph,
+    private var graph: RoadGraph,
     private val hysteresisMeters: Double = 18.0,
     private val switchSamplesRequired: Int = 4,
     private val deadReckonAccuracyMeters: Double = 28.0,
@@ -26,6 +26,11 @@ class MapMatcher(
         last = null
         lastTimeMs = 0L
         switchVotes = 0
+    }
+
+    /** Swaps in a reloaded window. The current match is kept; link ids are stable across tiles. */
+    fun updateGraph(next: RoadGraph) {
+        graph = next
     }
 
     fun current(): Match? = last

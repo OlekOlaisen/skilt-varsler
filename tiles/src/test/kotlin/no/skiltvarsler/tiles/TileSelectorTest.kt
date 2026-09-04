@@ -67,6 +67,40 @@ class TileSelectorTest {
         assertThat(chosen.map { it.id }).doesNotContain("kommune-4601")
     }
 
+    @Test
+    fun windowReachesTheNeighborBeforeTheBorderIsCrossed() {
+        val chosen = TileSelector.intersectingWindow(
+            tiles = listOf(vestby, asKommune, bergen),
+            latitude = 59.62,
+            longitude = 10.75,
+            radiusMeters = 3_500.0,
+        )
+        assertThat(chosen.map { it.id }).containsExactly("kommune-3216", "kommune-3220")
+    }
+
+    @Test
+    fun windowSkipsKommunerOutOfReachAndBrokenBoxes() {
+        val world = tile("broken", minLon = -180.0, minLat = -90.0, maxLon = 180.0, maxLat = 90.0)
+        val chosen = TileSelector.intersectingWindow(
+            tiles = listOf(vestby, asKommune, bergen, world),
+            latitude = 59.50,
+            longitude = 10.75,
+            radiusMeters = 3_500.0,
+        )
+        assertThat(chosen.map { it.id }).containsExactly("kommune-3216")
+    }
+
+    @Test
+    fun windowIsEmptyWithoutGps() {
+        val chosen = TileSelector.intersectingWindow(
+            tiles = listOf(vestby, asKommune),
+            latitude = null,
+            longitude = null,
+            radiusMeters = 3_500.0,
+        )
+        assertThat(chosen).isEmpty()
+    }
+
     private fun tile(
         id: String,
         minLon: Double,

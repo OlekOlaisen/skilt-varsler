@@ -98,7 +98,9 @@ object AlertCopy {
             AlertKind.YIELD -> "Vikeplikt"
             AlertKind.HAZARD -> namedOrFallback(parsed, SignLabel.displayName(payload, "Fareskilt"))
             AlertKind.MUNICIPALITY -> SignLabel.displayName(payload, "Kommunegrense")
-            AlertKind.PRIORITY_ROAD -> "Forkjørsveg"
+            AlertKind.PRIORITY_ROAD -> {
+                if (isPriorityEnd(payload)) "Slutt på forkjørsveg" else "Forkjørsveg"
+            }
             AlertKind.SECTION_ATK_START -> namedOrFallback(parsed, "Streknings-ATK")
             AlertKind.SECTION_ATK_END -> "Slutt streknings-ATK"
             AlertKind.WILDLIFE -> wildlifeTitle(payload)
@@ -178,6 +180,12 @@ object AlertCopy {
 
     private fun isGeneric(value: String): Boolean {
         return genericTitles.any { it.equals(value, ignoreCase = true) }
+    }
+
+    internal fun isPriorityEnd(payload: String): Boolean {
+        val parsed = ObjectPayload.parse(payload)
+        val code = parsed.code.ifBlank { parsed.raw }
+        return code.startsWith("208")
     }
 
     private fun formatKroner(amount: Double): String {

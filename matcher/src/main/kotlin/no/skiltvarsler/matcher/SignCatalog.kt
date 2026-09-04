@@ -91,7 +91,6 @@ object SignCatalog {
             AlertKind.PRIORITY_ROAD,
             "Forkjørsveg",
             categoryKey = "priorityRoad",
-            defaultEnabled = false,
         ),
         SignOption("municipality", AlertKind.MUNICIPALITY, "Kommunegrense", categoryKey = "municipality"),
     )

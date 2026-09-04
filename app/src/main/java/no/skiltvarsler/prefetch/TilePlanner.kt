@@ -2,6 +2,7 @@ package no.skiltvarsler.prefetch
 
 import no.skiltvarsler.tiles.TileCoverage
 import no.skiltvarsler.tiles.TileSelector
+import no.skiltvarsler.tilesource.AndroidTileLoader
 import org.json.JSONObject
 
 data class ManifestTile(
@@ -69,15 +70,18 @@ object TilePlanner {
         ).map { ManifestTile.from(it) }
     }
 
-    fun containing(
+    /** Tiles the map-matching window needs right now, including a neighbour just up the road. */
+    fun window(
         tiles: List<ManifestTile>,
         latitude: Double?,
         longitude: Double?,
+        radiusMeters: Double = AndroidTileLoader.DEFAULT_WINDOW_METERS,
     ): List<ManifestTile> {
-        return TileSelector.containing(
+        return TileSelector.intersectingWindow(
             tiles = tiles.map { it.toCoverage() },
             latitude = latitude,
             longitude = longitude,
+            radiusMeters = radiusMeters,
         ).map { ManifestTile.from(it) }
     }
 }

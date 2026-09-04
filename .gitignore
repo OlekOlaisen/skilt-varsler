@@ -20,6 +20,8 @@ pipeline/__pycache__/
 out/
 tiles-out/
 pipeline/tiles-out/
+pipeline/merged/
+pipeline/existing/
 .cursor/
 *.log
 .vscode/

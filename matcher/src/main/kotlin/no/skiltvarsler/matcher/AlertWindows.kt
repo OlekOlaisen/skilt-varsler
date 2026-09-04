@@ -21,9 +21,9 @@ object AlertWindows {
         AlertKind.STOP -> Window(seconds = 3.0, minMeters = 15.0, maxMeters = 60.0)
         AlertKind.YIELD -> Window(seconds = 3.0, minMeters = 15.0, maxMeters = 60.0)
         AlertKind.HAZARD -> Window(seconds = 8.0, minMeters = 80.0, maxMeters = 250.0)
-        AlertKind.PRIORITY_ROAD -> Window(seconds = 5.0, minMeters = 30.0, maxMeters = 120.0)
+        AlertKind.PRIORITY_ROAD -> Window(seconds = 5.0, minMeters = 30.0, maxMeters = 70.0)
         AlertKind.MUNICIPALITY -> Window(seconds = 4.0, minMeters = 20.0, maxMeters = 80.0)
-        AlertKind.SPEED_LIMIT -> Window(seconds = 4.0, minMeters = 20.0, maxMeters = 120.0)
+        AlertKind.SPEED_LIMIT -> Window(seconds = 6.0, minMeters = 50.0, maxMeters = 120.0)
     }
 
     fun metersAhead(kind: AlertKind, speedMetersPerSecond: Double): ClosedFloatingPointRange<Double> {

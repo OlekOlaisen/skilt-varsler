@@ -86,6 +86,13 @@ data class SpeedInterval(
     val direction: TravelDirection,
 )
 
+data class UpcomingSpeedChange(
+    val kmh: Int,
+    val metersAhead: Double,
+    val sequenceId: Long,
+    val atPos: Double,
+)
+
 data class RoadObject(
     val nvdbId: Long,
     val type: RoadObjectType,

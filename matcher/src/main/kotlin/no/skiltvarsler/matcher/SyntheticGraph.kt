@@ -148,6 +148,9 @@ object SyntheticGraph {
     const val SEQ_CONTINUE = 402L
     const val SIDE_HAZARD_ID = 910001L
     const val CONTINUE_HAZARD_ID = 910002L
+    const val SIDE_PRIORITY_ID = 910003L
+    const val MAIN_PRIORITY_SIGN_ID = 910004L
+    const val SIDE_PRIORITY_REMINDER_ID = 910005L
     const val MAIN_LENGTH_METERS = 400.0
     const val SIDE_LENGTH_METERS = 300.0
 
@@ -231,6 +234,39 @@ object SyntheticGraph {
                 toPos = 80.0 / MAIN_LENGTH_METERS,
                 direction = TravelDirection.MED,
                 payload = "108",
+            ),
+        )
+        builder.addObject(
+            RoadObject(
+                nvdbId = MAIN_PRIORITY_SIGN_ID,
+                type = RoadObjectType.PRIORITY_ROAD,
+                sequenceId = SEQ_CONTINUE,
+                fromPos = 50.0 / MAIN_LENGTH_METERS,
+                toPos = 50.0 / MAIN_LENGTH_METERS,
+                direction = TravelDirection.MED,
+                payload = "206",
+            ),
+        )
+        builder.addObject(
+            RoadObject(
+                nvdbId = SIDE_PRIORITY_ID,
+                type = RoadObjectType.PRIORITY_ROAD,
+                sequenceId = SEQ_SIDE,
+                fromPos = 0.0,
+                toPos = 1.0,
+                direction = TravelDirection.MED,
+                payload = "206",
+            ),
+        )
+        builder.addObject(
+            RoadObject(
+                nvdbId = SIDE_PRIORITY_REMINDER_ID,
+                type = RoadObjectType.PRIORITY_ROAD,
+                sequenceId = SEQ_SIDE,
+                fromPos = 120.0 / SIDE_LENGTH_METERS,
+                toPos = 120.0 / SIDE_LENGTH_METERS,
+                direction = TravelDirection.MED,
+                payload = "206",
             ),
         )
         return builder.build()

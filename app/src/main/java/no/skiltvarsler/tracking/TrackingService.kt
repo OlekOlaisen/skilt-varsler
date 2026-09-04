@@ -45,6 +45,7 @@ class TrackingService : Service() {
     private val fused by lazy { LocationServices.getFusedLocationProviderClient(this) }
     private var lastCoverageKey: String? = null
     private var lastEmptyPrefetchMs: Long = 0L
+    private var lastPrefetchEnqueuedMs: Long = 0L
     private var cachedManifest: List<ManifestTile> = emptyList()
     private var cachedManifestModified: Long = -1L
     private val callback = object : LocationCallback() {
@@ -190,58 +191,79 @@ class TrackingService : Service() {
         }
     }
 
+    /**
+     * The graph is swapped into the existing engine rather than rebuilding it, because the window
+     * reloads every couple of kilometres. A fresh engine would drop the map match, the fired-alert
+     * memory and the last known kommune, which re-fires passed signs and swallows the border alert.
+     */
     private fun engineForCurrentGraph(): AlertEngine? {
         val settings = alertSettings ?: return engine
         val identity = GraphHolder.identity()
-        val existing = engine
-        if (existing != null && graphIdentity == identity) {
-            existing.updateSettings(settings)
-            return existing
-        }
-        val next = AlertEngine(GraphHolder.current(), settings)
-        engine = next
-        graphIdentity = identity
         val graph = GraphHolder.current()
-        DebugLog.append("GRAPH $identity links=${graph.links.size}")
-        return next
+        val existing = engine
+        if (existing == null) {
+            val created = AlertEngine(graph, settings)
+            engine = created
+            graphIdentity = identity
+            DebugLog.append("GRAPH $identity links=${graph.links.size}")
+            return created
+        }
+        existing.updateSettings(settings)
+        if (graphIdentity != identity) {
+            existing.updateGraph(graph)
+            graphIdentity = identity
+            DebugLog.append("GRAPH $identity links=${graph.links.size}")
+        }
+        return existing
     }
 
     private fun maybePrefetchForLocation() {
         val latitude = LastAlertStore.latitude ?: return
         val longitude = LastAlertStore.longitude ?: return
+        val now = System.currentTimeMillis()
         val tiles = readCachedManifest()
         if (tiles == null) {
-            val now = System.currentTimeMillis()
             if (lastCoverageKey == PENDING_MANIFEST && now - lastEmptyPrefetchMs < EMPTY_RETRY_MS) return
+            if (!enqueuePrefetch(now)) return
             lastCoverageKey = PENDING_MANIFEST
             lastEmptyPrefetchMs = now
-            TilePrefetch.enqueueNow(this)
             return
         }
-        val needed = TilePlanner.containing(tiles, latitude, longitude)
+        val tilesDir = File(filesDir, "tiles")
+        GraphHolder.setKnownTiles(tilesDir, tiles.map { it.toCoverage() })
+        val needed = TilePlanner.select(tiles, latitude, longitude, LastAlertStore.bearingDegrees)
         if (needed.isEmpty()) {
-            val now = System.currentTimeMillis()
             if (now - lastEmptyPrefetchMs < EMPTY_RETRY_MS) return
-            lastEmptyPrefetchMs = now
+            if (!enqueuePrefetch(now)) return
             lastCoverageKey = TileSelector.coverageKey(emptyList())
-            TilePrefetch.enqueueNow(this)
+            lastEmptyPrefetchMs = now
             return
         }
         val coverageKey = TileSelector.coverageKey(needed.map { it.toCoverage() })
-        val tilesDir = File(filesDir, "tiles")
         val neededFiles = needed.map { File(tilesDir, it.file) }
-        val onDisk = neededFiles.isNotEmpty() && neededFiles.all { it.exists() && it.length() > 0L }
-        if (onDisk && GraphHolder.covers(neededFiles)) {
+        val onDisk = neededFiles.all { it.exists() && it.length() > 0L }
+        if (onDisk && GraphHolder.covers(GraphHolder.windowFilesFor(latitude, longitude))) {
             lastCoverageKey = coverageKey
             return
         }
-        if (coverageKey == lastCoverageKey) {
-            val now = System.currentTimeMillis()
-            if (now - lastEmptyPrefetchMs < EMPTY_RETRY_MS) return
-            lastEmptyPrefetchMs = now
-        }
+        if (coverageKey == lastCoverageKey && now - lastEmptyPrefetchMs < EMPTY_RETRY_MS) return
+        if (!enqueuePrefetch(now)) return
         lastCoverageKey = coverageKey
+        lastEmptyPrefetchMs = now
+    }
+
+    /**
+     * Prefetch now covers neighbouring kommuner, so the wanted tile set shifts every time the car
+     * turns. The minimum interval keeps a winding road from re-running the worker on every fix,
+     * unless there is no graph at all and alerting depends on it.
+     */
+    private fun enqueuePrefetch(nowMs: Long): Boolean {
+        if (GraphHolder.isReady() && nowMs - lastPrefetchEnqueuedMs < PREFETCH_MIN_INTERVAL_MS) {
+            return false
+        }
+        lastPrefetchEnqueuedMs = nowMs
         TilePrefetch.enqueueNow(this)
+        return true
     }
 
     private fun readCachedManifest(): List<ManifestTile>? {
@@ -275,5 +297,6 @@ class TrackingService : Service() {
         const val ACTION_REPLAY = "no.skiltvarsler.REPLAY"
         private const val PENDING_MANIFEST = "pending-manifest"
         private const val EMPTY_RETRY_MS = 120_000L
+        private const val PREFETCH_MIN_INTERVAL_MS = 30_000L
     }
 }

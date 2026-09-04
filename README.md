@@ -9,7 +9,7 @@ The app matches your position to Norway’s official road network and warns you 
 - **Direction-aware alerts** — cameras and signs on *your* link, not a parallel road or the opposite carriageway
 - **Android Auto heads-up** — alerts can appear over the map while you navigate
 - **Official sign artwork** — Norwegian traffic-sign icons in the app and in notifications
-- **Automatic map tiles** — the kommune you are in is downloaded as you drive; crossing a border fetches the next one
+- **Automatic map tiles** — kommuner are downloaded ahead of the car, so the next one is ready before you cross the border
 
 ### On the phone
 

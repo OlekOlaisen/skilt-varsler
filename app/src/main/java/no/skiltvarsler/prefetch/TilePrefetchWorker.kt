@@ -35,43 +35,36 @@ class TilePrefetchWorker(
                 LastAlertStore.setTileStatus("Venter på GPS for å hente kommune-flis")
                 return@withContext Result.success()
             }
-            val manifestJson = JSONObject(downloadText("$base/manifest.json"))
-            val allTiles = TilePlanner.parseManifest(manifestJson)
             val localManifest = File(cacheDir, "manifest.json")
-            val needed = TilePlanner.containing(allTiles, latitude, longitude)
+            val cachedManifest = readManifestIfFresh(localManifest)
+            val manifestJson = cachedManifest ?: JSONObject(downloadText("$base/manifest.json"))
+            val allTiles = TilePlanner.parseManifest(manifestJson)
+            GraphHolder.setKnownTiles(cacheDir, allTiles.map { it.toCoverage() })
+            val windowTiles = TilePlanner.window(allTiles, latitude, longitude)
+            val aheadTiles = TilePlanner
+                .select(allTiles, latitude, longitude, LastAlertStore.bearingDegrees)
+                .filterNot { ahead -> windowTiles.any { it.id == ahead.id } }
             val localVersions = readLocalVersions(localManifest)
-            var downloaded = 0
-            for (tile in needed) {
-                val target = File(cacheDir, tile.file)
-                val versionOk = localVersions[tile.id] == tile.version
-                if (target.exists() && !AndroidTileLoader.isReadable(target)) {
-                    target.delete()
-                }
-                if (target.exists() && versionOk && AndroidTileLoader.isReadable(target)) {
-                    continue
-                }
-                LastAlertStore.setTileStatus("Henter kommune-flis…")
-                downloadAtomically(target, "$base/${tile.file}")
-                downloaded += 1
+            var downloaded = download(windowTiles, cacheDir, base, localVersions)
+            if (cachedManifest == null) {
+                localManifest.writeText(manifestJson.toString())
             }
-            localManifest.writeText(manifestJson.toString())
-            val files = needed.map { File(cacheDir, it.file) }.filter { it.exists() }
+            val files = GraphHolder.windowFilesFor(latitude, longitude)
             if (files.isEmpty()) {
                 GraphHolder.clear()
                 LastAlertStore.setTileStatus(statusText(allTiles, files, downloaded, latitude, longitude))
                 return@withContext Result.success()
             }
-            if (downloaded == 0 && GraphHolder.covers(files)) {
-                LastAlertStore.setTileStatus(statusText(allTiles, files, downloaded, latitude, longitude))
-                return@withContext Result.success()
+            if (downloaded > 0 || !GraphHolder.covers(files)) {
+                try {
+                    GraphHolder.loadNear(files, latitude, longitude)
+                } catch (error: SQLiteException) {
+                    files.forEach { file -> file.delete() }
+                    LastAlertStore.setTileStatus("Flisfeil: korrupt kommune-flis, henter på nytt")
+                    return@withContext Result.retry()
+                }
             }
-            try {
-                GraphHolder.loadNear(files, latitude, longitude)
-            } catch (error: SQLiteException) {
-                files.forEach { file -> file.delete() }
-                LastAlertStore.setTileStatus("Flisfeil: korrupt kommune-flis, henter på nytt")
-                return@withContext Result.retry()
-            }
+            downloaded += download(aheadTiles, cacheDir, base, localVersions)
             LastAlertStore.setTileStatus(statusText(allTiles, files, downloaded, latitude, longitude))
             Result.success()
         } catch (error: OutOfMemoryError) {
@@ -82,6 +75,29 @@ class TilePrefetchWorker(
             LastAlertStore.setTileStatus("Flisfeil: ${error.message ?: error.javaClass.simpleName}")
             Result.retry()
         }
+    }
+
+    private fun download(
+        tiles: List<ManifestTile>,
+        cacheDir: File,
+        base: String,
+        localVersions: Map<String, String>,
+    ): Int {
+        var downloaded = 0
+        for (tile in tiles) {
+            val target = File(cacheDir, tile.file)
+            val versionOk = localVersions[tile.id] == tile.version
+            if (target.exists() && !AndroidTileLoader.isReadable(target)) {
+                target.delete()
+            }
+            if (target.exists() && versionOk && AndroidTileLoader.isReadable(target)) {
+                continue
+            }
+            LastAlertStore.setTileStatus("Henter kommune-flis…")
+            downloadAtomically(target, "$base/${tile.file}")
+            downloaded += 1
+        }
+        return downloaded
     }
 
     private fun statusText(
@@ -100,6 +116,20 @@ class TilePrefetchWorker(
         }
         val graph = GraphHolder.current()
         return "Fliser: ${graph.tileId} (${files.size} filer, $downloaded nye)"
+    }
+
+    /**
+     * Driving into new territory enqueues this worker often, so the manifest is reused for a while
+     * instead of being downloaded on every run. The periodic jobs pick up newer tile versions.
+     */
+    private fun readManifestIfFresh(manifestFile: File): JSONObject? {
+        if (!manifestFile.exists()) return null
+        if (System.currentTimeMillis() - manifestFile.lastModified() > MANIFEST_MAX_AGE_MS) return null
+        return try {
+            JSONObject(manifestFile.readText())
+        } catch (_: Exception) {
+            null
+        }
     }
 
     private fun readLocalVersions(manifestFile: File): Map<String, String> {
@@ -187,5 +217,6 @@ class TilePrefetchWorker(
     companion object {
         const val UNIQUE_NAME = "tile-prefetch"
         const val UNIQUE_WIFI = "tile-prefetch-wifi"
+        private const val MANIFEST_MAX_AGE_MS = 60 * 60 * 1000L
     }
 }

@@ -34,6 +34,8 @@ class AlertCopyTest {
         assertThat(AlertCopy.titleFor(AlertKind.SECTION_ATK_START, "556.2|Lærdalstunnelen"))
             .isEqualTo("Lærdalstunnelen")
         assertThat(AlertCopy.titleFor(AlertKind.WILDLIFE, "Elg")).isEqualTo("Viltfare — elg")
+        assertThat(AlertCopy.titleFor(AlertKind.PRIORITY_ROAD, "206")).isEqualTo("Forkjørsveg")
+        assertThat(AlertCopy.titleFor(AlertKind.PRIORITY_ROAD, "208")).isEqualTo("Slutt på forkjørsveg")
     }
 
     @Test

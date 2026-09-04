@@ -86,5 +86,6 @@ object SignLabel {
         "202" to "Vikeplikt",
         "204" to "Stopp",
         "206" to "Forkjørsveg",
+        "208" to "Slutt på forkjørsveg",
     )
 }

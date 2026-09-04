@@ -47,6 +47,12 @@ class SignCatalogTest {
     }
 
     @Test
+    fun forkjoersvegIsOnByDefault() {
+        assertThat(AlertSettings.ALL_ON.enabled(AlertKind.PRIORITY_ROAD)).isTrue()
+        assertThat(SignCatalog.option("priorityRoad")!!.defaultEnabled).isTrue()
+    }
+
+    @Test
     fun hazardLabelsMatchOfficialSignNumbers() {
         val byPayload = SignCatalog.hazards.associate { it.payload to it.label }
         assertThat(byPayload["100.1"]).isEqualTo("Farlig sving til høyre")

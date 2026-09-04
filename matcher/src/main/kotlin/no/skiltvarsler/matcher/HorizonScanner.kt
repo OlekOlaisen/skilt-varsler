@@ -10,9 +10,13 @@ import no.skiltvarsler.tiles.TravelDirection
 import kotlin.math.abs
 
 class HorizonScanner(
-    private val graph: RoadGraph,
+    private var graph: RoadGraph,
     private val continueHeadingDegrees: Double = 50.0,
 ) {
+    fun updateGraph(next: RoadGraph) {
+        graph = next
+    }
+
     fun scan(match: Match, speedMetersPerSecond: Double): List<HorizonCandidate> {
         val maxMeters = AlertWindows.maxLookaheadMeters(speedMetersPerSecond)
         val found = ArrayList<HorizonCandidate>()

@@ -34,6 +34,7 @@ data class TileCoverage(
 object TileSelector {
     const val NEIGHBOR_PAD_DEGREES = 0.18
     const val DEFAULT_LOOKAHEAD_KM = 40.0
+    const val DEFAULT_WINDOW_PAD_METERS = 5_000.0
 
     fun select(
         tiles: List<TileCoverage>,
@@ -71,12 +72,57 @@ object TileSelector {
         return tiles.filter { it.contains(latitude, longitude) }
     }
 
+    /**
+     * Tiles that reach into the match window around the position, so the graph can hold roads
+     * from a neighbouring kommune before the border is crossed. The pad makes a tile join the
+     * window slightly before its roads are needed; loading a tile without roads in range is cheap.
+     */
+    fun intersectingWindow(
+        tiles: List<TileCoverage>,
+        latitude: Double?,
+        longitude: Double?,
+        radiusMeters: Double,
+        padMeters: Double = DEFAULT_WINDOW_PAD_METERS,
+    ): List<TileCoverage> {
+        if (latitude == null || longitude == null) return emptyList()
+        val reachMeters = radiusMeters + padMeters
+        val origin = LatLon(latitude, longitude)
+        val southWest = Geo.offsetMeters(origin, northMeters = -reachMeters, eastMeters = -reachMeters)
+        val northEast = Geo.offsetMeters(origin, northMeters = reachMeters, eastMeters = reachMeters)
+        return tiles.filter { tile ->
+            tile.hasUsableBbox() &&
+                boundsOverlap(
+                    tile = tile,
+                    minLon = southWest.longitude,
+                    minLat = southWest.latitude,
+                    maxLon = northEast.longitude,
+                    maxLat = northEast.latitude,
+                )
+        }
+    }
+
     fun coverageKey(tiles: List<TileCoverage>): String {
         return tiles.map { it.id }.sorted().joinToString("+").ifEmpty { "empty" }
     }
 
     private fun boxesOverlap(left: TileCoverage, right: TileCoverage): Boolean {
-        return max(left.minLon, right.minLon) <= min(left.maxLon, right.maxLon) &&
-            max(left.minLat, right.minLat) <= min(left.maxLat, right.maxLat)
+        return boundsOverlap(
+            tile = right,
+            minLon = left.minLon,
+            minLat = left.minLat,
+            maxLon = left.maxLon,
+            maxLat = left.maxLat,
+        )
+    }
+
+    private fun boundsOverlap(
+        tile: TileCoverage,
+        minLon: Double,
+        minLat: Double,
+        maxLon: Double,
+        maxLat: Double,
+    ): Boolean {
+        return max(tile.minLon, minLon) <= min(tile.maxLon, maxLon) &&
+            max(tile.minLat, minLat) <= min(tile.maxLat, maxLat)
     }
 }

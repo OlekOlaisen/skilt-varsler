@@ -104,6 +104,25 @@ class DrivingBehaviorTest {
     }
 
     @Test
+    fun turningOntoSideStreetAlertsPriorityRoadOnce() {
+        val graph = SyntheticGraph.mainRoadWithSideStreet()
+        val main = graph.sequences.getValue(SyntheticGraph.SEQ_MAIN).links.first()
+        val side = graph.sequences.getValue(SyntheticGraph.SEQ_SIDE).links.first()
+        val alongMain = Replay.alongLink(main, TravelDirection.MED, speedMetersPerSecond = 15.0)
+        val beforeTurn = alongMain.takeWhile { fix -> fix.timeMs <= 18_000L }
+        val alongSide = Replay.alongLink(
+            side,
+            TravelDirection.MED,
+            speedMetersPerSecond = 12.0,
+            startTimeMs = beforeTurn.last().timeMs + 1_000L,
+        )
+        val result = Replay.play(AlertEngine(graph), beforeTurn + alongSide)
+        val priority = result.alertsOf(AlertKind.PRIORITY_ROAD)
+        assertThat(priority).hasSize(1)
+        assertThat(priority.single().nvdbId).isEqualTo(SyntheticGraph.SIDE_PRIORITY_ID)
+    }
+
+    @Test
     fun mutedDrivingDoesNotFireCameraButKeepsHorizon() {
         val graph = SyntheticGraph.e6VestbyLike()
         val moving = Replay.alongLink(
