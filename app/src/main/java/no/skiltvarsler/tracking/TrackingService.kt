@@ -170,6 +170,11 @@ class TrackingService : Service() {
         LastAlertStore.setTracking(status)
         LastAlertStore.setUpcomingSigns(upcomingSigns())
         DebugLog.appendFix(fix, match, LastAlertStore.tileStatus())
+        DebugLog.appendHorizon(
+            match = match,
+            horizon = engine?.currentHorizon().orEmpty(),
+            force = alerts.isNotEmpty(),
+        )
         withContext(Dispatchers.Main.immediate) {
             if (LastAlertStore.alertsMuted) {
                 return@withContext

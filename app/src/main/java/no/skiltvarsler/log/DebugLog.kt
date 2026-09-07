@@ -17,7 +17,9 @@ import kotlinx.coroutines.flow.update
 import no.skiltvarsler.BuildConfig
 import no.skiltvarsler.matcher.Alert
 import no.skiltvarsler.matcher.GpsFix
+import no.skiltvarsler.matcher.HorizonCandidate
 import no.skiltvarsler.matcher.Match
+import no.skiltvarsler.tiles.RoadObjectType
 import no.skiltvarsler.tilesource.GraphHolder
 import no.skiltvarsler.tracking.LastAlertStore
 
@@ -123,6 +125,44 @@ object DebugLog {
                 "\"${oneLine(alert.title)}\" | ${oneLine(alert.body)} " +
                 "payload=${oneLine(alert.payload)} nvdb=${alert.nvdbId} seq=${alert.sequenceId}",
         )
+    }
+
+    /**
+     * Compact horizon dump for diagnosing false alerts (side-street stop/yield, etc.).
+     * Writes only when junction-control signs are ahead, or when [force] is set (e.g. an alert fired).
+     */
+    fun appendHorizon(
+        match: Match?,
+        horizon: List<HorizonCandidate>,
+        force: Boolean = false,
+    ) {
+        if (!enabledState.value) {
+            return
+        }
+        val junction = horizon.filter { candidate ->
+            candidate.obj.type == RoadObjectType.STOP || candidate.obj.type == RoadObjectType.YIELD
+        }
+        if (!force && junction.isEmpty()) {
+            return
+        }
+        val matchPart = if (match == null) {
+            "seq=-"
+        } else {
+            "seq=${match.sequenceId} link=${match.linkId} " +
+                "pos=${String.format(Locale.US, "%.3f", match.position)} dir=${match.direction}"
+        }
+        val nearest = horizon.take(5)
+        val interesting = (junction + nearest).distinctBy { it.obj.nvdbId }.take(8)
+        val detail = if (interesting.isEmpty()) {
+            "none"
+        } else {
+            interesting.joinToString("; ") { candidate ->
+                "${candidate.obj.type}@${candidate.obj.sequenceId}:" +
+                    "${String.format(Locale.US, "%.0f", candidate.metersAhead)}m#" +
+                    "${candidate.obj.nvdbId}"
+            }
+        }
+        appendAlways("HORIZON $matchPart n=${horizon.size} $detail")
     }
 
     fun clear() {

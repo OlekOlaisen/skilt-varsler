@@ -12,6 +12,8 @@ import kotlin.math.abs
 class HorizonScanner(
     private var graph: RoadGraph,
     private val continueHeadingDegrees: Double = 50.0,
+    private val bestContinuationMarginDegrees: Double = 12.0,
+    private val junctionControlMaxTurnDegrees: Double = 20.0,
 ) {
     fun updateGraph(next: RoadGraph) {
         graph = next
@@ -46,6 +48,7 @@ class HorizonScanner(
 
             for (obj in graph.objectsOn(frame.sequenceId)) {
                 if (!obj.direction.matches(frame.direction)) continue
+                if (!includeObject(obj, match.sequenceId, frame, startHeading)) continue
                 val hitPos = if (obj.isPoint) obj.fromPos else intervalEntry(obj, frame.direction)
                 if (hitPos + 1e-9 < rangeStart || hitPos - 1e-9 > rangeEnd) continue
                 val ahead = abs(hitPos - frame.position) * sequence.lengthMeters + frame.metersUsed
@@ -56,24 +59,23 @@ class HorizonScanner(
             val exitPos = if (frame.direction == TravelDirection.MED) 1.0 else 0.0
             val metersToEnd = abs(exitPos - frame.position) * sequence.lengthMeters
             if (metersToEnd < remaining) {
-                val nodeId = if (frame.direction == TravelDirection.MED) sequence.endNodeId else sequence.startNodeId
+                val nodeId = if (frame.direction == TravelDirection.MED) {
+                    sequence.endNodeId
+                } else {
+                    sequence.startNodeId
+                }
                 val nextLinks = graph.linksFromNode(nodeId)
                     .filter { it.sequenceId != frame.sequenceId }
                 val travelHeading = frame.travelHeading
                     ?: headingOnSequence(frame.sequenceId, exitPos, frame.direction)
-                for (nextLink in nextLinks) {
-                    val arrivingAtStart = nextLink.startNodeId == nodeId
-                    val nextDirection = if (arrivingAtStart) TravelDirection.MED else TravelDirection.MOT
-                    val nextHeading = entryHeading(nextLink, arrivingAtStart)
-                    if (!shouldContinue(travelHeading, nextHeading, nextLinks.size)) continue
-                    val nextPos = if (arrivingAtStart) nextLink.startPos else nextLink.endPos
+                for (next in bestContinuations(nextLinks, nodeId, travelHeading)) {
                     queue.add(
                         Frame(
-                            sequenceId = nextLink.sequenceId,
-                            position = nextPos,
-                            direction = nextDirection,
+                            sequenceId = next.link.sequenceId,
+                            position = next.position,
+                            direction = next.direction,
                             metersUsed = frame.metersUsed + metersToEnd,
-                            travelHeading = nextHeading,
+                            travelHeading = next.heading,
                         ),
                     )
                 }
@@ -82,15 +84,68 @@ class HorizonScanner(
         return found.sortedBy { it.metersAhead }
     }
 
-    private fun shouldContinue(
-        travelHeading: Double?,
-        nextHeading: Double?,
-        outgoingCount: Int,
+    /**
+     * Stop and yield apply to the approach you are on. Following a side street into the
+     * horizon must not surface those plates while the car stays on the through road.
+     */
+    private fun includeObject(
+        obj: RoadObject,
+        matchedSequenceId: Long,
+        frame: Frame,
+        startHeading: Double?,
     ): Boolean {
-        if (travelHeading == null || nextHeading == null) {
-            return outgoingCount == 1
+        if (obj.type != RoadObjectType.STOP && obj.type != RoadObjectType.YIELD) {
+            return true
         }
-        return Geo.headingDeltaDegrees(travelHeading, nextHeading) <= continueHeadingDegrees
+        if (frame.sequenceId == matchedSequenceId) {
+            return true
+        }
+        val pathHeading = frame.travelHeading ?: return false
+        val origin = startHeading ?: return false
+        return Geo.headingDeltaDegrees(origin, pathHeading) <= junctionControlMaxTurnDegrees
+    }
+
+    /**
+     * Among outgoing links within [continueHeadingDegrees], keep only those close to the
+     * straightest option so a 30° side street is ignored when the through road continues.
+     */
+    private fun bestContinuations(
+        nextLinks: List<RoadLink>,
+        nodeId: Long,
+        travelHeading: Double?,
+    ): List<Continuation> {
+        if (nextLinks.isEmpty()) return emptyList()
+        val scored = ArrayList<Continuation>()
+        for (nextLink in nextLinks) {
+            val arrivingAtStart = nextLink.startNodeId == nodeId
+            val nextDirection = if (arrivingAtStart) TravelDirection.MED else TravelDirection.MOT
+            val nextHeading = entryHeading(nextLink, arrivingAtStart)
+            val nextPos = if (arrivingAtStart) nextLink.startPos else nextLink.endPos
+            scored.add(
+                Continuation(
+                    link = nextLink,
+                    direction = nextDirection,
+                    position = nextPos,
+                    heading = nextHeading,
+                ),
+            )
+        }
+        if (travelHeading == null) {
+            return if (scored.size == 1) scored else emptyList()
+        }
+        val withDelta = scored.mapNotNull { continuation ->
+            val heading = continuation.heading ?: return@mapNotNull null
+            continuation to Geo.headingDeltaDegrees(travelHeading, heading)
+        }
+        if (withDelta.isEmpty()) {
+            return if (scored.size == 1) scored else emptyList()
+        }
+        val bestDelta = withDelta.minOf { it.second }
+        if (bestDelta > continueHeadingDegrees) {
+            return emptyList()
+        }
+        val cutoff = (bestDelta + bestContinuationMarginDegrees).coerceAtMost(continueHeadingDegrees)
+        return withDelta.filter { it.second <= cutoff }.map { it.first }
     }
 
     private fun headingOnSequence(
@@ -156,6 +211,13 @@ class HorizonScanner(
             maxOf(obj.fromPos, obj.toPos)
         }
     }
+
+    private data class Continuation(
+        val link: RoadLink,
+        val direction: TravelDirection,
+        val position: Double,
+        val heading: Double?,
+    )
 
     private data class Frame(
         val sequenceId: Long,

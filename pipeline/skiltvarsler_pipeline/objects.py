@@ -339,10 +339,11 @@ def _nearest_tunnel_ahead(
 
 def classify_regulering(verdi: str) -> str | None:
     token = verdi.lower()
-    if "stopp" in token or "stopplikt" in token:
-        return "STOP"
+    # Prefer yield when both words appear (e.g. "tidligere stopplikt, nå vikeplikt").
     if "vikeplikt" in token:
         return "YIELD"
+    if "stopplikt" in token or "stopp" in token:
+        return "STOP"
     return None
 
 
@@ -379,12 +380,31 @@ def ingest_trafikkreguleringer(graph: TileGraph, objects: Iterable[dict[str, Any
     return added
 
 
-def drop_skilt_stop_yield_if_regulering_exists(graph: TileGraph, had_regulering: bool) -> None:
-    if not had_regulering:
+def _is_skiltnummer_payload(payload: str) -> bool:
+    return payload.replace(".", "").isdigit()
+
+
+def prefer_skiltplate_over_regulering_for_stop_yield(graph: TileGraph) -> None:
+    """
+    Physical plates (skiltnummer 202/204) are the ground truth for what drivers see.
+    NVDB trafikkregulering text is often stale or wrong (Stopplikt where there is only
+    vikeplikt). When a plate exists on a sequence, drop regulering STOP/YIELD on that
+    same sequence; never discard plates just because the kommune has some regulering.
+    """
+    sequences_with_plate = {
+        obj.sequence_id
+        for obj in graph.objects
+        if obj.type in {"STOP", "YIELD"} and _is_skiltnummer_payload(obj.payload)
+    }
+    if not sequences_with_plate:
         return
     kept: list[RoadObject] = []
     for obj in graph.objects:
-        if obj.type in {"STOP", "YIELD"} and obj.payload.replace(".", "").isdigit():
+        if (
+            obj.type in {"STOP", "YIELD"}
+            and obj.sequence_id in sequences_with_plate
+            and not _is_skiltnummer_payload(obj.payload)
+        ):
             graph.warnings += 1
             continue
         kept.append(obj)

@@ -10,12 +10,12 @@ from .model import KommunePolygon, RoadObject, TileGraph
 from .nvdb import NvdbClient
 from .objects import (
     collect_tunnels,
-    drop_skilt_stop_yield_if_regulering_exists,
     enrich_tunnel_signs,
     ingest_fartsgrense,
     ingest_skiltplate,
     ingest_trafikkreguleringer,
     ingest_typed,
+    prefer_skiltplate_over_regulering_for_stop_yield,
 )
 from .sanitize import sanitize
 from .tile import write_tile
@@ -91,7 +91,6 @@ def build_kommune(
         sequences = list(client.iter_veglenkesekvenser(kommune))
         ingest_sequences(graph, sequences)
         ingest_fartsgrense(graph, client.iter_vegobjekter(105, kommune))
-        regulering_hits = 0
         tunnels: list[RoadObject] = []
         for type_id in OBJECT_TYPES:
             if type_id == 96 and not include_signs:
@@ -102,10 +101,10 @@ def build_kommune(
             elif type_id == 96:
                 ingest_skiltplate(graph, objects)
             elif type_id == 856:
-                regulering_hits = ingest_trafikkreguleringer(graph, objects)
+                ingest_trafikkreguleringer(graph, objects)
             else:
                 ingest_typed(graph, type_id, objects)
-        drop_skilt_stop_yield_if_regulering_exists(graph, regulering_hits > 0)
+        prefer_skiltplate_over_regulering_for_stop_yield(graph)
         enrich_tunnel_signs(graph, tunnels)
         attach_kommune_polygon(graph, client, kommune)
     sanitize(graph)

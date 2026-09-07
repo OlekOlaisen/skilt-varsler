@@ -5,12 +5,12 @@ from skiltvarsler_pipeline.objects import (
     classify_regulering,
     classify_sign,
     collect_tunnels,
-    drop_skilt_stop_yield_if_regulering_exists,
     encode_payload,
     enrich_tunnel_signs,
     ingest_skiltplate,
     ingest_typed,
     payload_for_type,
+    prefer_skiltplate_over_regulering_for_stop_yield,
 )
 
 
@@ -61,21 +61,26 @@ def test_classifies_stop_yield_and_hazard():
     assert classify_sign("362.80") is None
 
 
-def test_regulering_preferred_over_skiltnummer():
+def test_skiltplate_wins_over_regulering_on_same_sequence():
     assert classify_regulering("Vikeplikt") == "YIELD"
     assert classify_regulering("Stopplikt") == "STOP"
+    assert classify_regulering("tidligere stopplikt, nå vikeplikt") == "YIELD"
     assert classify_regulering("Motortrafikk kun tillatt") is None
     graph = TileGraph(tile_id="t", version="1")
     graph.objects = [
-        RoadObject(1, "YIELD", 10, 0.2, 0.2, "MED", "Vikeplikt"),
-        RoadObject(2, "YIELD", 99, 0.1, 0.1, "MED", "202"),
-        RoadObject(3, "HAZARD", 10, 0.4, 0.4, "MED", "146.1"),
+        RoadObject(1, "STOP", 10, 0.2, 0.2, "MED", "Stopplikt"),
+        RoadObject(2, "YIELD", 10, 0.2, 0.2, "MED", "202"),
+        RoadObject(3, "STOP", 99, 0.1, 0.1, "MED", "Stopplikt"),
+        RoadObject(4, "HAZARD", 10, 0.4, 0.4, "MED", "146.1"),
     ]
-    drop_skilt_stop_yield_if_regulering_exists(graph, True)
-    types_payloads = {(obj.type, obj.payload) for obj in graph.objects}
-    assert ("YIELD", "Vikeplikt") in types_payloads
-    assert ("YIELD", "202") not in types_payloads
-    assert ("HAZARD", "146.1") in types_payloads
+    prefer_skiltplate_over_regulering_for_stop_yield(graph)
+    on_ten = [(obj.type, obj.payload) for obj in graph.objects if obj.sequence_id == 10]
+    assert ("YIELD", "202") in on_ten
+    assert ("STOP", "Stopplikt") not in on_ten
+    assert ("HAZARD", "146.1") in on_ten
+    # Sequence without a plate keeps its regulering.
+    on_ninetynine = [(obj.type, obj.payload) for obj in graph.objects if obj.sequence_id == 99]
+    assert on_ninetynine == [("STOP", "Stopplikt")]
 
 
 def test_toll_payload_has_name_and_price():

@@ -154,18 +154,34 @@ object SyntheticGraph {
     const val MAIN_LENGTH_METERS = 400.0
     const val SIDE_LENGTH_METERS = 300.0
 
+    const val SIDE_STOP_ID = 910006L
+    const val SIDE_YIELD_ID = 910007L
+    const val ANGLED_SIDE_DEGREES = 30.0
+
     fun mainRoadWithSideStreet(): RoadGraph {
+        return junctionGraph(sideBearingDegrees = 90.0, includeJunctionControl = false)
+    }
+
+    /** Through road north with a side street leaving at [sideBearingDegrees] from north. */
+    fun mainRoadWithAngledSideStreet(sideBearingDegrees: Double = ANGLED_SIDE_DEGREES): RoadGraph {
+        return junctionGraph(sideBearingDegrees = sideBearingDegrees, includeJunctionControl = true)
+    }
+
+    private fun junctionGraph(
+        sideBearingDegrees: Double,
+        includeJunctionControl: Boolean,
+    ): RoadGraph {
         val junction = Geo.offsetMeters(origin, northMeters = MAIN_LENGTH_METERS, eastMeters = 0.0)
         val northEnd = Geo.offsetMeters(junction, northMeters = MAIN_LENGTH_METERS, eastMeters = 0.0)
-        val eastEnd = Geo.offsetMeters(junction, northMeters = 0.0, eastMeters = SIDE_LENGTH_METERS)
+        val sideEnd = Geo.destination(junction, sideBearingDegrees, SIDE_LENGTH_METERS)
         val builder = RoadGraphBuilder().apply {
-            tileId = "fixture-main-side"
+            tileId = if (sideBearingDegrees == 90.0) "fixture-main-side" else "fixture-main-angled-side"
             version = "test"
         }
         builder.addNode(RoadNode(1, origin))
         builder.addNode(RoadNode(2, junction))
         builder.addNode(RoadNode(3, northEnd))
-        builder.addNode(RoadNode(4, eastEnd))
+        builder.addNode(RoadNode(4, sideEnd))
         builder.addLink(
             RoadLink(
                 id = 40,
@@ -208,7 +224,7 @@ object SyntheticGraph {
                 lengthMeters = SIDE_LENGTH_METERS,
                 typeVeg = "Enkel bilveg",
                 matchable = true,
-                points = dense(junction, eastEnd),
+                points = dense(junction, sideEnd),
             ),
         )
         builder.setSequenceLength(SEQ_MAIN, MAIN_LENGTH_METERS)
@@ -269,6 +285,31 @@ object SyntheticGraph {
                 payload = "206",
             ),
         )
+        // Mis-tagged the way NVDB often is: plate facing out MED at the junction mouth.
+        if (includeJunctionControl) {
+            builder.addObject(
+                RoadObject(
+                    nvdbId = SIDE_STOP_ID,
+                    type = RoadObjectType.STOP,
+                    sequenceId = SEQ_SIDE,
+                    fromPos = 5.0 / SIDE_LENGTH_METERS,
+                    toPos = 5.0 / SIDE_LENGTH_METERS,
+                    direction = TravelDirection.MED,
+                    payload = "204",
+                ),
+            )
+            builder.addObject(
+                RoadObject(
+                    nvdbId = SIDE_YIELD_ID,
+                    type = RoadObjectType.YIELD,
+                    sequenceId = SEQ_SIDE,
+                    fromPos = 8.0 / SIDE_LENGTH_METERS,
+                    toPos = 8.0 / SIDE_LENGTH_METERS,
+                    direction = TravelDirection.MED,
+                    payload = "202",
+                ),
+            )
+        }
         return builder.build()
     }
 

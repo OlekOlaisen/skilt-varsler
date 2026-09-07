@@ -21,8 +21,63 @@ class DrivingBehaviorTest {
         val ids = found.map { it.obj.nvdbId }
         assertThat(ids).contains(SyntheticGraph.CONTINUE_HAZARD_ID)
         assertThat(ids).doesNotContain(SyntheticGraph.SIDE_HAZARD_ID)
+        assertThat(ids).doesNotContain(SyntheticGraph.SIDE_STOP_ID)
+        assertThat(ids).doesNotContain(SyntheticGraph.SIDE_YIELD_ID)
         val ahead = found.first { it.obj.nvdbId == SyntheticGraph.CONTINUE_HAZARD_ID }
         assertThat(ahead.metersAhead).isWithin(15.0).of(180.0)
+    }
+
+    @Test
+    fun angledSideStreetStopAndYieldAreIgnoredWhileDrivingPast() {
+        val graph = SyntheticGraph.mainRoadWithAngledSideStreet(sideBearingDegrees = 30.0)
+        val main = graph.sequences.getValue(SyntheticGraph.SEQ_MAIN)
+        val match = Match(
+            linkId = main.links.first().id,
+            sequenceId = main.id,
+            position = 0.90,
+            direction = TravelDirection.MED,
+            snapped = main.links.first().points.last(),
+            distanceToLinkMeters = 0.0,
+        )
+        val found = HorizonScanner(graph).scan(match, speedMetersPerSecond = 12.0)
+        val ids = found.map { it.obj.nvdbId }
+        assertThat(ids).contains(SyntheticGraph.CONTINUE_HAZARD_ID)
+        assertThat(ids).doesNotContain(SyntheticGraph.SIDE_HAZARD_ID)
+        assertThat(ids).doesNotContain(SyntheticGraph.SIDE_STOP_ID)
+        assertThat(ids).doesNotContain(SyntheticGraph.SIDE_YIELD_ID)
+    }
+
+    @Test
+    fun drivingPastAngledSideStreetDoesNotFireStopAlert() {
+        val graph = SyntheticGraph.mainRoadWithAngledSideStreet(sideBearingDegrees = 30.0)
+        val main = graph.sequences.getValue(SyntheticGraph.SEQ_MAIN).links.first()
+        val continueLink = graph.sequences.getValue(SyntheticGraph.SEQ_CONTINUE).links.first()
+        val alongMain = Replay.alongLink(main, TravelDirection.MED, speedMetersPerSecond = 12.0)
+        val alongContinue = Replay.alongLink(
+            continueLink,
+            TravelDirection.MED,
+            speedMetersPerSecond = 12.0,
+            startTimeMs = alongMain.last().timeMs + 1_000L,
+        )
+        val result = Replay.play(AlertEngine(graph), alongMain + alongContinue)
+        assertThat(result.alertsOf(AlertKind.STOP)).isEmpty()
+        assertThat(result.alertsOf(AlertKind.YIELD)).isEmpty()
+        assertThat(result.alertsOf(AlertKind.HAZARD).map { it.nvdbId })
+            .contains(SyntheticGraph.CONTINUE_HAZARD_ID)
+        assertThat(result.alertsOf(AlertKind.HAZARD).map { it.nvdbId })
+            .doesNotContain(SyntheticGraph.SIDE_HAZARD_ID)
+    }
+
+    @Test
+    fun turningOntoSideStreetStillSeesYieldOnThatRoad() {
+        val graph = SyntheticGraph.mainRoadWithAngledSideStreet(sideBearingDegrees = 30.0)
+        val side = graph.sequences.getValue(SyntheticGraph.SEQ_SIDE).links.first()
+        val result = Replay.play(
+            AlertEngine(graph),
+            Replay.alongLink(side, TravelDirection.MED, speedMetersPerSecond = 8.0),
+        )
+        assertThat(result.alertsOf(AlertKind.YIELD).map { it.nvdbId })
+            .contains(SyntheticGraph.SIDE_YIELD_ID)
     }
 
     @Test
@@ -84,7 +139,7 @@ class DrivingBehaviorTest {
     }
 
     @Test
-    fun turningOntoSideStreetSwitchesOnFirstClearSample() {
+    fun turningOntoSideStreetSwitchesAfterClearSamples() {
         val graph = SyntheticGraph.mainRoadWithSideStreet()
         val main = graph.sequences.getValue(SyntheticGraph.SEQ_MAIN).links.first()
         val side = graph.sequences.getValue(SyntheticGraph.SEQ_SIDE).links.first()
@@ -99,8 +154,27 @@ class DrivingBehaviorTest {
             speedMetersPerSecond = 12.0,
             startTimeMs = alongMain.last().timeMs + 1_000L,
         )
-        matcher.update(alongSide[1])
+        alongSide.take(4).forEach { matcher.update(it) }
         assertThat(matcher.current()!!.sequenceId).isEqualTo(SyntheticGraph.SEQ_SIDE)
+    }
+
+    @Test
+    fun drivingPastAngledSideStreetKeepsMainSequenceMatch() {
+        val graph = SyntheticGraph.mainRoadWithAngledSideStreet(sideBearingDegrees = 30.0)
+        val main = graph.sequences.getValue(SyntheticGraph.SEQ_MAIN).links.first()
+        val continueLink = graph.sequences.getValue(SyntheticGraph.SEQ_CONTINUE).links.first()
+        val matcher = MapMatcher(graph)
+        val alongMain = Replay.alongLink(main, TravelDirection.MED, speedMetersPerSecond = 12.0)
+        val alongContinue = Replay.alongLink(
+            continueLink,
+            TravelDirection.MED,
+            speedMetersPerSecond = 12.0,
+            startTimeMs = alongMain.last().timeMs + 1_000L,
+        )
+        (alongMain + alongContinue).forEach { matcher.update(it) }
+        val matched = matcher.current()!!
+        assertThat(matched.sequenceId).isAnyOf(SyntheticGraph.SEQ_MAIN, SyntheticGraph.SEQ_CONTINUE)
+        assertThat(matched.sequenceId).isNotEqualTo(SyntheticGraph.SEQ_SIDE)
     }
 
     @Test
