@@ -25,7 +25,7 @@ class MainActivity : ComponentActivity() {
         if (granted[Manifest.permission.ACCESS_FINE_LOCATION] == true) {
             startTrackingService()
         } else {
-            LastAlertStore.setTracking("Lokasjonstilgang trengs for sporing")
+            LastAlertStore.setTracking("Lokasjonstilgang trengs for kjøretur")
         }
     }
 
@@ -41,7 +41,13 @@ class MainActivity : ComponentActivity() {
                 SkiltAppScreen(
                     onStartTracking = ::startTracking,
                     onStopTracking = ::stopTracking,
-                    onReplay = ::startReplay,
+                    onReplayE6 = { startReplay { ReplayRunner.runE6Camera(applicationContext) } },
+                    onReplayOsloRing2 = {
+                        startReplay { ReplayRunner.runGpsTrace(applicationContext, "gps/oslo_ring2.txt") }
+                    },
+                    onReplayE6Jessheim = {
+                        startReplay { ReplayRunner.runGpsTrace(applicationContext, "gps/e6_jessheim_grua.txt") }
+                    },
                     onEnsureNotifications = ::requestNotificationPermission,
                 )
             }
@@ -64,10 +70,10 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private fun startReplay() {
+    private fun startReplay(block: suspend () -> Unit) {
         requestNotificationPermission()
         lifecycleScope.launch {
-            ReplayRunner.run(applicationContext)
+            block()
         }
     }
 

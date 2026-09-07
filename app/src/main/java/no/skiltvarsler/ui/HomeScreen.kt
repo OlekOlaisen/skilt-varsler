@@ -21,13 +21,13 @@ import no.skiltvarsler.matcher.Alert
 
 @Composable
 fun HomeScreen(
-    tracking: String,
-    trackingActive: Boolean,
+    tripStatus: String,
+    tripActive: Boolean,
     tileStatus: String,
     lastTitle: String,
     lastBody: String,
     lastAlert: Alert?,
-    onToggleTracking: () -> Unit,
+    onToggleTrip: () -> Unit,
 ) {
     Column(
         modifier = Modifier
@@ -43,23 +43,23 @@ fun HomeScreen(
             color = MaterialTheme.colorScheme.secondary,
         )
         Button(
-            onClick = onToggleTracking,
+            onClick = onToggleTrip,
             modifier = Modifier
                 .fillMaxWidth()
                 .height(64.dp),
             contentPadding = PaddingValues(horizontal = 24.dp, vertical = 16.dp),
         ) {
             Text(
-                if (trackingActive) "Stopp sporing" else "Start sporing",
+                if (tripActive) "Stopp kjøretur" else "Start kjøretur",
                 style = MaterialTheme.typography.titleLarge,
             )
         }
-        StatusCard(title = "Sporing", value = tracking, subtitle = "Posisjon forlater ikke telefonen")
+        StatusCard(title = "Kjøretur", value = tripStatus, subtitle = "Posisjon forlater ikke telefonen")
         StatusCard(title = "Siste varsel", value = lastTitle, subtitle = lastBody, alert = lastAlert)
         StatusCard(
-            title = "NVDB-fliser",
+            title = "Kart",
             value = tileStatus,
-            subtitle = "Hentes automatisk for kommunen du er i.",
+            subtitle = "Hentes automatisk for kommunene rundt deg.",
         )
         Text(
             "Android Auto: slå på Ukjente kilder i Auto-utviklerinnstillinger, og pin Skilt-varsler under Tilpass startside.",

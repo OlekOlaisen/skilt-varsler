@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.BarChart
 import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.Notifications
 import androidx.compose.material.icons.outlined.Science
@@ -24,17 +25,19 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import no.skiltvarsler.matcher.AlertSettings
-import no.skiltvarsler.prefetch.TilePrefetch
 import no.skiltvarsler.settings.SettingsStore
 import no.skiltvarsler.tracking.AlertNotifier
 import no.skiltvarsler.tracking.LastAlertStore
 import no.skiltvarsler.tracking.TestAlerts
+import no.skiltvarsler.tracking.TripRecorder
 
 private enum class AppTab {
     Home,
     Alerts,
+    Stats,
     Test,
     Settings,
 }
@@ -43,31 +46,48 @@ private enum class AppTab {
 fun SkiltAppScreen(
     onStartTracking: () -> Unit,
     onStopTracking: () -> Unit,
-    onReplay: () -> Unit,
+    onReplayE6: () -> Unit,
+    onReplayOsloRing2: () -> Unit,
+    onReplayE6Jessheim: () -> Unit,
     onEnsureNotifications: () -> Unit = {},
 ) {
     val context = LocalContext.current
     val store = remember { SettingsStore(context) }
     val settings by store.settings.collectAsState(initial = AlertSettings.ALL_ON)
-    val tileUrl by store.tileBaseUrl.collectAsState(initial = SettingsStore.DEFAULT_TILE_BASE_URL)
+    val autoStartTracking by store.autoStartTracking.collectAsState(initial = true)
+    val lastTripSummary by TripRecorder.lastSummary.collectAsState()
+    val pendingTripSummary by TripRecorder.pendingDisplay.collectAsState()
     val scope = rememberCoroutineScope()
     var selectedTab by remember { mutableStateOf(AppTab.Home) }
-    var tracking by remember { mutableStateOf(LastAlertStore.trackingStatus()) }
-    var trackingActive by remember { mutableStateOf(LastAlertStore.trackingActive) }
+    var tripStatus by remember { mutableStateOf(LastAlertStore.trackingStatus()) }
+    var tripActive by remember { mutableStateOf(LastAlertStore.trackingActive) }
     var tileStatus by remember { mutableStateOf(LastAlertStore.tileStatus()) }
     var lastAlert by remember { mutableStateOf(LastAlertStore.current()) }
     var lastTitle by remember { mutableStateOf(LastAlertStore.current()?.title ?: "Ingen varsel ennå") }
-    var lastBody by remember { mutableStateOf(LastAlertStore.current()?.body ?: "Start sporing eller test et varsel") }
-    var urlDraft by remember { mutableStateOf(tileUrl) }
+    var lastBody by remember { mutableStateOf(LastAlertStore.current()?.body ?: "Start kjøretur eller test et varsel") }
+    var autoStartAttempted by remember { mutableStateOf(false) }
 
-    LaunchedEffect(tileUrl) {
-        urlDraft = tileUrl
+    LaunchedEffect(Unit) {
+        if (!autoStartAttempted) {
+            autoStartAttempted = true
+            val shouldAutoStart = store.autoStartTracking.first()
+            if (shouldAutoStart && !LastAlertStore.trackingActive) {
+                onStartTracking()
+            }
+        }
+    }
+
+    LaunchedEffect(pendingTripSummary, lastTripSummary) {
+        if (pendingTripSummary && lastTripSummary != null) {
+            selectedTab = AppTab.Stats
+            TripRecorder.markSummarySeen()
+        }
     }
 
     LaunchedEffect(Unit) {
         while (true) {
-            tracking = LastAlertStore.trackingStatus()
-            trackingActive = LastAlertStore.trackingActive
+            tripStatus = LastAlertStore.trackingStatus()
+            tripActive = LastAlertStore.trackingActive
             tileStatus = LastAlertStore.tileStatus()
             LastAlertStore.current()?.let {
                 lastAlert = it
@@ -95,6 +115,12 @@ fun SkiltAppScreen(
                     label = { Text("Varsler") },
                 )
                 NavigationBarItem(
+                    selected = selectedTab == AppTab.Stats,
+                    onClick = { selectedTab = AppTab.Stats },
+                    icon = { Icon(Icons.Outlined.BarChart, contentDescription = "Statistikk") },
+                    label = { Text("Statistikk") },
+                )
+                NavigationBarItem(
                     selected = selectedTab == AppTab.Test,
                     onClick = { selectedTab = AppTab.Test },
                     icon = { Icon(Icons.Outlined.Science, contentDescription = "Test") },
@@ -112,14 +138,14 @@ fun SkiltAppScreen(
         Box(modifier = Modifier.padding(padding)) {
             when (selectedTab) {
                 AppTab.Home -> HomeScreen(
-                    tracking = tracking,
-                    trackingActive = trackingActive,
+                    tripStatus = tripStatus,
+                    tripActive = tripActive,
                     tileStatus = tileStatus,
                     lastTitle = lastTitle,
                     lastBody = lastBody,
                     lastAlert = lastAlert,
-                    onToggleTracking = {
-                        if (trackingActive) onStopTracking() else onStartTracking()
+                    onToggleTrip = {
+                        if (tripActive) onStopTracking() else onStartTracking()
                     },
                 )
                 AppTab.Alerts -> AlertsScreen(
@@ -131,23 +157,24 @@ fun SkiltAppScreen(
                         scope.launch { store.setGroupEnabled(group, enabled) }
                     },
                 )
+                AppTab.Stats -> StatsScreen(summary = lastTripSummary)
                 AppTab.Test -> TestScreen(
-                    onReplay = onReplay,
+                    onReplayE6 = onReplayE6,
+                    onReplayOsloRing2 = onReplayOsloRing2,
+                    onReplayE6Jessheim = onReplayE6Jessheim,
                     onTestSign = { sign ->
                         onEnsureNotifications()
                         AlertNotifier.publishAlert(context, TestAlerts.alertFor(sign))
                     },
                 )
                 AppTab.Settings -> SettingsScreen(
-                    tileUrlDraft = urlDraft,
-                    onTileUrlChange = { urlDraft = it },
-                    onSaveTileUrl = {
-                        scope.launch { store.setTileBaseUrl(urlDraft.trim()) }
-                        TilePrefetch.enqueueNow(context)
-                    },
                     alertsMuted = settings.alertsMuted,
                     onAlertsMutedChange = { muted ->
                         scope.launch { store.setAlertsMuted(muted) }
+                    },
+                    autoStartTracking = autoStartTracking,
+                    onAutoStartTrackingChange = { enabled ->
+                        scope.launch { store.setAutoStartTracking(enabled) }
                     },
                 )
             }

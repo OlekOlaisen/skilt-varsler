@@ -17,15 +17,21 @@ class MapMatcher(
     private val headingAlignDegrees: Double = 55.0,
     private val stayOnSequenceMeters: Double = 22.0,
     private val headingTurnDegrees: Double = 40.0,
+    private val multipathJumpMeters: Double = 45.0,
+    private val recoverSamplesRequired: Int = 3,
 ) {
     private var last: Match? = null
     private var lastTimeMs: Long = 0L
     private var switchVotes: Int = 0
+    private var holdRecoverSamples: Int = 0
+    private var holding: Boolean = false
 
     fun reset() {
         last = null
         lastTimeMs = 0L
         switchVotes = 0
+        holdRecoverSamples = 0
+        holding = false
     }
 
     /** Swaps in a reloaded window. The current match is kept; link ids are stable across tiles. */
@@ -35,14 +41,19 @@ class MapMatcher(
 
     fun current(): Match? = last
 
+    /** True while the matcher advances along the last road instead of trusting raw GPS. */
+    fun isHolding(): Boolean = holding
+
     fun update(fix: GpsFix): Match? {
         val dtSeconds = if (lastTimeMs == 0L) 1.0 else ((fix.timeMs - lastTimeMs) / 1000.0).coerceIn(0.2, 3.0)
         lastTimeMs = fix.timeMs
         val previous = last
 
-        if (previous != null && fix.accuracyMeters > deadReckonAccuracyMeters) {
+        if (previous != null && shouldHoldToRoad(previous, fix, dtSeconds)) {
             last = deadReckon(previous, fix, dtSeconds)
             switchVotes = 0
+            holding = true
+            holdRecoverSamples = recoverSamplesRequired
             return last
         }
 
@@ -53,12 +64,18 @@ class MapMatcher(
         val best = scored.firstOrNull()
         if (best == null) {
             last = previous?.let { deadReckon(it, fix, dtSeconds) }
+            holding = previous != null
+            if (holding) {
+                holdRecoverSamples = recoverSamplesRequired
+            }
             return last
         }
 
         if (previous == null) {
             last = best.toMatch()
             switchVotes = 0
+            holding = false
+            holdRecoverSamples = 0
             return last
         }
 
@@ -69,10 +86,23 @@ class MapMatcher(
         if (sameLink || (sameSequence && best.distanceMeters <= stayOnSequenceMeters)) {
             last = best.toMatch()
             switchVotes = 0
+            markRecoveredOrStillHolding(accuracyGood = fix.accuracyMeters <= deadReckonAccuracyMeters)
             return last
         }
 
         val projected = deadReckon(previous, fix, dtSeconds)
+        if (holdRecoverSamples > 0) {
+            /**
+             * After tunnel/bridge multipath, the first clean GPS sample often snaps onto a
+             * side street. Keep advancing along the held road until several good samples agree.
+             */
+            holdRecoverSamples -= 1
+            last = projected
+            holding = true
+            switchVotes = 0
+            return last
+        }
+
         val projectedCost = projectedScore(projected, fix)
         val betterBy = projectedCost - best.cost
         val headingTurned = headingTurnedAway(previous, fix)
@@ -96,6 +126,8 @@ class MapMatcher(
             if (switchVotes >= votesNeeded) {
                 last = best.toMatch()
                 switchVotes = 0
+                holding = false
+                holdRecoverSamples = 0
                 return last
             }
         } else {
@@ -103,7 +135,45 @@ class MapMatcher(
         }
 
         last = projected
+        holding = false
         return last
+    }
+
+    private fun shouldHoldToRoad(previous: Match, fix: GpsFix, dtSeconds: Double): Boolean {
+        if (fix.accuracyMeters > deadReckonAccuracyMeters) {
+            return true
+        }
+        if (fix.speedMetersPerSecond < 1.5) {
+            return false
+        }
+        if (!headingAgreesWithRoad(previous, fix)) {
+            return false
+        }
+        val projected = deadReckon(previous, fix, dtSeconds)
+        val crossTrackMeters = crossTrackDistanceMeters(projected, fix.position)
+        return crossTrackMeters > multipathJumpMeters
+    }
+
+    private fun crossTrackDistanceMeters(match: Match, position: LatLon): Double {
+        val link = graph.links[match.linkId]
+        if (link == null || link.points.size < 2) {
+            return Geo.distanceMeters(position, match.snapped)
+        }
+        return closestPointOnPolyline(position, link.points).distanceMeters
+    }
+
+    private fun markRecoveredOrStillHolding(accuracyGood: Boolean) {
+        if (!accuracyGood) {
+            holding = true
+            holdRecoverSamples = recoverSamplesRequired
+            return
+        }
+        if (holdRecoverSamples > 0) {
+            holdRecoverSamples -= 1
+            holding = holdRecoverSamples > 0
+            return
+        }
+        holding = false
     }
 
     private fun headingTurnedAway(previous: Match, fix: GpsFix): Boolean {

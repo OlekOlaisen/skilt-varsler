@@ -3,7 +3,6 @@ package no.skiltvarsler.settings
 import android.content.Context
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
-import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
@@ -30,8 +29,12 @@ class SettingsStore(private val context: Context) {
         )
     }
 
-    val tileBaseUrl: Flow<String> = context.dataStore.data.map { prefs ->
-        prefs[Keys.tileBaseUrl] ?: DEFAULT_TILE_BASE_URL
+    val tileBaseUrl: Flow<String> = context.dataStore.data.map {
+        DEFAULT_TILE_BASE_URL
+    }
+
+    val autoStartTracking: Flow<Boolean> = context.dataStore.data.map { prefs ->
+        prefs[Keys.autoStartTracking] ?: true
     }
 
     suspend fun setSignEnabled(id: String, enabled: Boolean) {
@@ -54,15 +57,15 @@ class SettingsStore(private val context: Context) {
         }
     }
 
-    suspend fun setTileBaseUrl(url: String) {
+    suspend fun setAutoStartTracking(enabled: Boolean) {
         context.dataStore.edit { prefs ->
-            prefs[Keys.tileBaseUrl] = url
+            prefs[Keys.autoStartTracking] = enabled
         }
     }
 
     private object Keys {
-        val tileBaseUrl = stringPreferencesKey("tileBaseUrl")
         val alertsMuted = booleanPreferencesKey("alertsMuted")
+        val autoStartTracking = booleanPreferencesKey("autoStartTracking")
     }
 
     companion object {

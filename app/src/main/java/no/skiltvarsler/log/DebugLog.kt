@@ -86,13 +86,19 @@ object DebugLog {
         appendAlways(message)
     }
 
-    fun appendFix(fix: GpsFix, match: Match?, tileStatus: String) {
+    fun appendFix(
+        fix: GpsFix,
+        match: Match?,
+        tileStatus: String,
+        holding: Boolean = false,
+    ) {
         if (!enabledState.value) {
             return
         }
         val speedKmh = String.format(Locale.US, "%.0f", fix.speedMetersPerSecond * 3.6)
         val accuracy = String.format(Locale.US, "%.1f", fix.accuracyMeters)
         val bearing = fix.bearingDegrees?.let { String.format(Locale.US, "%.0f", it) } ?: "-"
+        val holdText = if (holding) "HOLD" else "LIVE"
         val matchText = if (match == null) {
             "MATCH none"
         } else {
@@ -103,12 +109,13 @@ object DebugLog {
         appendAlways(
             String.format(
                 Locale.US,
-                "GPS %.6f,%.6f acc=%sm spd=%skm/h brg=%s %s graph=%s tile=%s",
+                "GPS %.6f,%.6f acc=%sm spd=%skm/h brg=%s %s %s graph=%s tile=%s",
                 fix.position.latitude,
                 fix.position.longitude,
                 accuracy,
                 speedKmh,
                 bearing,
+                holdText,
                 matchText,
                 GraphHolder.identity(),
                 tileStatus.replace('\n', ' '),

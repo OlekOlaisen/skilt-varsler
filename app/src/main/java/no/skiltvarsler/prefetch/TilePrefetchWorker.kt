@@ -10,6 +10,7 @@ import kotlinx.coroutines.withContext
 import no.skiltvarsler.settings.SettingsStore
 import no.skiltvarsler.tilesource.AndroidTileLoader
 import no.skiltvarsler.tilesource.GraphHolder
+import no.skiltvarsler.tilesource.KartStatus
 import no.skiltvarsler.tracking.LastAlertStore
 import org.json.JSONObject
 import java.io.File
@@ -23,7 +24,7 @@ class TilePrefetchWorker(
     override suspend fun doWork(): Result = withContext(Dispatchers.IO) {
         val base = SettingsStore(applicationContext).tileBaseUrl.first().trimEnd('/')
         if (base.isBlank()) {
-            LastAlertStore.setTileStatus("Ingen flis-URL satt")
+            LastAlertStore.setTileStatus("Ingen kart-URL satt")
             return@withContext Result.success()
         }
         val cacheDir = File(applicationContext.filesDir, "tiles").apply { mkdirs() }
@@ -32,7 +33,7 @@ class TilePrefetchWorker(
             val latitude = LastAlertStore.latitude
             val longitude = LastAlertStore.longitude
             if (latitude == null || longitude == null) {
-                LastAlertStore.setTileStatus("Venter på GPS for å hente kommune-flis")
+                LastAlertStore.setTileStatus("Venter på GPS for å hente kart")
                 return@withContext Result.success()
             }
             val localManifest = File(cacheDir, "manifest.json")
@@ -60,7 +61,7 @@ class TilePrefetchWorker(
                     GraphHolder.loadNear(files, latitude, longitude)
                 } catch (error: SQLiteException) {
                     files.forEach { file -> file.delete() }
-                    LastAlertStore.setTileStatus("Flisfeil: korrupt kommune-flis, henter på nytt")
+                    LastAlertStore.setTileStatus("Kartfeil: korrupt kartfil, henter på nytt")
                     return@withContext Result.retry()
                 }
             }
@@ -69,10 +70,10 @@ class TilePrefetchWorker(
             Result.success()
         } catch (error: OutOfMemoryError) {
             GraphHolder.clear()
-            LastAlertStore.setTileStatus("Flisfeil: for lite minne til kommune-flisen")
+            LastAlertStore.setTileStatus("Kartfeil: for lite minne til kartet")
             Result.failure()
         } catch (error: Exception) {
-            LastAlertStore.setTileStatus("Flisfeil: ${error.message ?: error.javaClass.simpleName}")
+            LastAlertStore.setTileStatus("Kartfeil: ${error.message ?: error.javaClass.simpleName}")
             Result.retry()
         }
     }
@@ -93,7 +94,8 @@ class TilePrefetchWorker(
             if (target.exists() && versionOk && AndroidTileLoader.isReadable(target)) {
                 continue
             }
-            LastAlertStore.setTileStatus("Henter kommune-flis…")
+            val kommuneLabel = KartStatus.formatNames(KartStatus.tileIdsToNames(tile.id))
+            LastAlertStore.setTileStatus("Henter kart for $kommuneLabel…")
             downloadAtomically(target, "$base/${tile.file}")
             downloaded += 1
         }
@@ -107,15 +109,15 @@ class TilePrefetchWorker(
         latitude: Double?,
         longitude: Double?,
     ): String {
-        if (allTiles.isEmpty()) return "Ingen fliser i manifestet"
+        if (allTiles.isEmpty()) return "Ingen kart i manifestet"
         if (files.isEmpty() && latitude != null && longitude != null) {
-            return "Ingen flis for denne posisjonen ennå"
+            return "Ingen kart for denne posisjonen ennå"
         }
         if (files.isEmpty()) {
-            return "Venter på GPS for å hente kommune-flis"
+            return "Venter på GPS for å hente kart"
         }
         val graph = GraphHolder.current()
-        return "Fliser: ${graph.tileId} (${files.size} filer, $downloaded nye)"
+        return KartStatus.fromGraph(graph, files.size, downloaded)
     }
 
     /**

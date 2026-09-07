@@ -47,7 +47,9 @@ private val LogPreviewHeight = 140.dp
 
 @Composable
 fun TestScreen(
-    onReplay: () -> Unit,
+    onReplayE6: () -> Unit,
+    onReplayOsloRing2: () -> Unit,
+    onReplayE6Jessheim: () -> Unit,
     onTestSign: (SignOption) -> Unit,
 ) {
     val context = LocalContext.current
@@ -73,19 +75,30 @@ fun TestScreen(
         }
         item {
             Text(
-                "Sender ekte varsler på telefonen (og Auto hvis tilkoblet). Replay spiller av en E6-fotoboks.",
+                "Sender ekte varsler på telefonen (og Auto hvis tilkoblet). GPS-replay bruker faste spor " +
+                    "og simulerer tunnel-hold.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.secondary,
             )
         }
         item {
-            Button(onClick = onReplay, modifier = Modifier.fillMaxWidth()) {
-                Text("Test-replay (E6 fotoboks)")
+            Button(onClick = onReplayE6, modifier = Modifier.fillMaxWidth()) {
+                Text("Replay E6 fotoboks")
+            }
+        }
+        item {
+            OutlinedButton(onClick = onReplayOsloRing2, modifier = Modifier.fillMaxWidth()) {
+                Text("GPS-replay Oslo Ring 2")
+            }
+        }
+        item {
+            OutlinedButton(onClick = onReplayE6Jessheim, modifier = Modifier.fillMaxWidth()) {
+                Text("GPS-replay E6 Jessheim")
             }
         }
         item {
             Text(
-                "Debug-logg",
+                "Tur-logg",
                 style = MaterialTheme.typography.titleSmall,
                 fontWeight = FontWeight.SemiBold,
                 modifier = Modifier.padding(top = 8.dp),
@@ -94,9 +107,9 @@ fun TestScreen(
         item {
             Text(
                 if (logging) {
-                    "Logger GPS, match og varsler. Stopp og del teksten med AI."
+                    "Logger GPS, match, hold og varsler. Stopp og del teksten etter turen."
                 } else {
-                    "Start loggføring før en kjøretur. Del eller kopier loggen og send den til AI."
+                    "Start loggføring før en kjøretur. Del eller kopier loggen til AI."
                 },
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.secondary,
@@ -135,7 +148,7 @@ fun TestScreen(
                             Toast.makeText(context, "Loggen er tom", Toast.LENGTH_SHORT).show()
                         } else {
                             val clipboard = context.getSystemService(ClipboardManager::class.java)
-                            clipboard.setPrimaryClip(ClipData.newPlainText("Skilt-varsler debug-logg", text))
+                            clipboard.setPrimaryClip(ClipData.newPlainText("Skilt-varsler tur-logg", text))
                             Toast.makeText(context, "Logg kopiert", Toast.LENGTH_SHORT).show()
                         }
                     },
@@ -155,8 +168,6 @@ fun TestScreen(
             }
         }
         item {
-            // Fixed-height preview so a growing log never stretches the Test tab.
-            // The full log still accumulates in DebugLog / the shareable file.
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text(
                     if (logging) {

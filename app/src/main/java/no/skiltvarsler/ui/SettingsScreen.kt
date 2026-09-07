@@ -9,8 +9,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -21,11 +19,10 @@ import androidx.compose.ui.unit.dp
 
 @Composable
 fun SettingsScreen(
-    tileUrlDraft: String,
-    onTileUrlChange: (String) -> Unit,
-    onSaveTileUrl: () -> Unit,
     alertsMuted: Boolean,
     onAlertsMutedChange: (Boolean) -> Unit,
+    autoStartTracking: Boolean,
+    onAutoStartTrackingChange: (Boolean) -> Unit,
 ) {
     Column(
         modifier = Modifier
@@ -36,22 +33,28 @@ fun SettingsScreen(
     ) {
         Text("Innstillinger", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold)
         Text(
-            "Fliser lastes fra GitHub-releasen. Endre URL bare hvis du peker mot et annet uttrekk.",
+            "Kart hentes automatisk fra GitHub når du kjører.",
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.secondary,
         )
-        OutlinedTextField(
-            value = tileUrlDraft,
-            onValueChange = onTileUrlChange,
+        Text("Kjøretur", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+        Row(
             modifier = Modifier.fillMaxWidth(),
-            label = { Text("Flis-URL") },
-            singleLine = true,
-        )
-        OutlinedButton(
-            onClick = onSaveTileUrl,
-            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween,
         ) {
-            Text("Lagre og hent fliser på nytt")
+            Column(modifier = Modifier.weight(1f).padding(end = 12.dp)) {
+                Text("Start automatisk", style = MaterialTheme.typography.bodyLarge)
+                Text(
+                    "Starter kjøretur når appen åpnes, hvis lokasjonstilgang er gitt.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.secondary,
+                )
+            }
+            Switch(
+                checked = autoStartTracking,
+                onCheckedChange = onAutoStartTrackingChange,
+            )
         }
         Text("Android Auto", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
         Row(

@@ -50,6 +50,8 @@ class AlertEngine(
 
     fun currentMatch(): Match? = matcher.current()
 
+    fun isHoldingMatch(): Boolean = matcher.isHolding()
+
     fun currentHorizon(): List<HorizonCandidate> = lastHorizon
 
     fun update(fix: GpsFix): List<Alert> {
@@ -61,7 +63,11 @@ class AlertEngine(
         refreshHorizon(match, fix.speedMetersPerSecond)
         val speed = fix.speedMetersPerSecond
         val driving = speed >= AlertWindows.MIN_DRIVING_SPEED_METERS_PER_SECOND
-        val alerting = driving && !settings.alertsMuted
+        /**
+         * Mute only suppresses notifications. Alerts are still produced so trip statistics
+         * and the upcoming-sign list stay accurate during a silent drive.
+         */
+        val alerting = driving
         refreshPriorityStay(match, speed, fix.timeMs)
         val alerts = ArrayList<Alert>()
 
@@ -83,7 +89,7 @@ class AlertEngine(
         )?.let { alerts.add(it) }
         collectSectionAtkExit(match, alerting)?.let { alerts.add(it) }
 
-        if (!driving || settings.alertsMuted) {
+        if (!driving) {
             updatePriorityMembership(match)
             pruneFired()
             return alerts

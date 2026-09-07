@@ -29,7 +29,7 @@ object LastAlertStore {
 
     private val last = AtomicReference<Alert?>(null)
     private val tracking = AtomicReference("Klar")
-    private val tile = AtomicReference("Ingen NVDB-flis lastet")
+    private val tile = AtomicReference("Ingen kart lastet")
     private val upcoming = AtomicReference<List<UpcomingSign>>(emptyList())
     private val muted = AtomicBoolean(false)
     private val listeners = CopyOnWriteArrayList<() -> Unit>()
@@ -85,7 +85,7 @@ object LastAlertStore {
     fun setTrackingActive(active: Boolean) {
         val previous = trackingActive
         trackingActive = active
-        if (!active && tracking.get() == "Starter sporing") {
+        if (!active && tracking.get() == "Starter kjøretur") {
             tracking.set("Stoppet")
         }
         if (!active) {

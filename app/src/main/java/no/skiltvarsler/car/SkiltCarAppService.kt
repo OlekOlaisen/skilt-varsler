@@ -120,7 +120,7 @@ class StatusScreen(carContext: CarContext) : Screen(carContext) {
 
     private fun emptyTitle(): String {
         if (!LastAlertStore.trackingActive) {
-            return "Start sporing på telefonen"
+            return "Start kjøretur på telefonen"
         }
         val status = LastAlertStore.trackingStatus()
         if (status == "Ingen match" ||

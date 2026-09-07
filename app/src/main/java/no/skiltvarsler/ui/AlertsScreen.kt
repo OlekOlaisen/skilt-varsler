@@ -34,7 +34,7 @@ fun AlertsScreen(
     ) {
         Text("Varsler", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold)
         Text(
-            "Velg hvilke skilt som skal varsles under sporing. Valgene huskes.",
+            "Velg hvilke skilt som skal varsles under kjøreturen. Valgene huskes.",
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.secondary,
         )

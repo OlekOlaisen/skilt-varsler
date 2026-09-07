@@ -121,6 +121,65 @@ class DrivingBehaviorTest {
     }
 
     @Test
+    fun tunnelMultipathKeepsMainRoadUntilGpsRecovers() {
+        val graph = SyntheticGraph.mainRoadWithSideStreet()
+        val main = graph.sequences.getValue(SyntheticGraph.SEQ_MAIN).links.first()
+        val side = graph.sequences.getValue(SyntheticGraph.SEQ_SIDE).links.first()
+        val matcher = MapMatcher(graph)
+        val alongMain = Replay.alongLink(main, TravelDirection.MED, speedMetersPerSecond = 15.0)
+        alongMain.take(10).forEach { matcher.update(it) }
+        assertThat(matcher.current()!!.sequenceId).isEqualTo(SyntheticGraph.SEQ_MAIN)
+
+        val mid = alongMain[10]
+        val sidePoint = side.points[side.points.size / 2]
+        repeat(5) { sample ->
+            matcher.update(
+                mid.copy(
+                    timeMs = mid.timeMs + (sample + 1) * 1_000L,
+                    position = sidePoint,
+                    accuracyMeters = 60.0,
+                    speedMetersPerSecond = 15.0,
+                    bearingDegrees = mid.bearingDegrees,
+                ),
+            )
+            assertThat(matcher.isHolding()).isTrue()
+            assertThat(matcher.current()!!.sequenceId).isEqualTo(SyntheticGraph.SEQ_MAIN)
+        }
+
+        val recovered = Replay.alongLink(
+            main,
+            TravelDirection.MED,
+            speedMetersPerSecond = 15.0,
+            startTimeMs = mid.timeMs + 8_000L,
+        ).drop(12).take(6)
+        recovered.forEach { matcher.update(it) }
+        assertThat(matcher.current()!!.sequenceId).isEqualTo(SyntheticGraph.SEQ_MAIN)
+        assertThat(matcher.isHolding()).isFalse()
+    }
+
+    @Test
+    fun gpsJumpWithClaimedGoodAccuracyStillHoldsThroughRoad() {
+        val graph = SyntheticGraph.mainRoadWithSideStreet()
+        val main = graph.sequences.getValue(SyntheticGraph.SEQ_MAIN).links.first()
+        val side = graph.sequences.getValue(SyntheticGraph.SEQ_SIDE).links.first()
+        val matcher = MapMatcher(graph)
+        val alongMain = Replay.alongLink(main, TravelDirection.MED, speedMetersPerSecond = 14.0)
+        alongMain.take(8).forEach { matcher.update(it) }
+        val mid = alongMain[8]
+        matcher.update(
+            mid.copy(
+                timeMs = mid.timeMs + 1_000L,
+                position = side.points.last(),
+                accuracyMeters = 8.0,
+                speedMetersPerSecond = 14.0,
+                bearingDegrees = mid.bearingDegrees,
+            ),
+        )
+        assertThat(matcher.isHolding()).isTrue()
+        assertThat(matcher.current()!!.sequenceId).isEqualTo(SyntheticGraph.SEQ_MAIN)
+    }
+
+    @Test
     fun standingStillStillListsCameraOnHorizon() {
         val graph = SyntheticGraph.e6VestbyLike()
         val moving = Replay.alongLink(
@@ -197,7 +256,7 @@ class DrivingBehaviorTest {
     }
 
     @Test
-    fun mutedDrivingDoesNotFireCameraButKeepsHorizon() {
+    fun mutedDrivingStillProducesCameraAlertForTripStats() {
         val graph = SyntheticGraph.e6VestbyLike()
         val moving = Replay.alongLink(
             graph.e6NorthLink(),
@@ -206,7 +265,7 @@ class DrivingBehaviorTest {
         )
         val engine = AlertEngine(graph, AlertSettings(alertsMuted = true))
         val alerts = moving.take(16).flatMap { engine.update(it) }
-        assertThat(alerts.filter { it.kind == AlertKind.SPEED_CAMERA }).isEmpty()
+        assertThat(alerts.filter { it.kind == AlertKind.SPEED_CAMERA }).isNotEmpty()
         assertThat(engine.currentHorizon().map { it.obj.nvdbId }).contains(SyntheticGraph.ATK_ID)
     }
 }

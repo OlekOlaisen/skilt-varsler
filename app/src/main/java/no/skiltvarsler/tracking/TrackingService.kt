@@ -33,6 +33,7 @@ import no.skiltvarsler.settings.SettingsStore
 import no.skiltvarsler.tiles.LatLon
 import no.skiltvarsler.tiles.TileSelector
 import no.skiltvarsler.tilesource.GraphHolder
+import no.skiltvarsler.tilesource.KartStatus
 import org.json.JSONObject
 import java.io.File
 import kotlin.coroutines.resume
@@ -98,9 +99,10 @@ class TrackingService : Service() {
     }
 
     private fun startForegroundDriving() {
-        LastAlertStore.setTracking("Starter sporing")
+        LastAlertStore.setTracking("Starter kjøretur")
         LastAlertStore.setTrackingActive(true)
-        DebugLog.append("TRACKING start")
+        TripRecorder.start()
+        DebugLog.append("TRIP start")
         val notification = AlertNotifier.drivingNotification(this)
         try {
             if (android.os.Build.VERSION.SDK_INT >= 34) {
@@ -113,9 +115,10 @@ class TrackingService : Service() {
                 startForeground(AlertNotifier.DRIVING_NOTIFICATION_ID, notification)
             }
         } catch (error: SecurityException) {
-            LastAlertStore.setTracking("Kan ikke starte sporing: ${error.message}")
+            LastAlertStore.setTracking("Kan ikke starte kjøretur: ${error.message}")
             LastAlertStore.setTrackingActive(false)
-            DebugLog.append("TRACKING start failed: ${error.message}")
+            TripRecorder.cancel()
+            DebugLog.append("TRIP start failed: ${error.message}")
             stopSelf()
         }
     }
@@ -163,13 +166,20 @@ class TrackingService : Service() {
         val alerts = engineForCurrentGraph()?.update(fix).orEmpty()
         val match = engine?.currentMatch()
         val status = when {
-            !GraphHolder.isReady() -> "Henter kommune-flis…"
+            !GraphHolder.isReady() -> "Henter kart…"
             match == null -> "Ingen match"
             else -> "Lenke ${match.sequenceId}  pos ${"%.3f".format(match.position)}"
         }
         LastAlertStore.setTracking(status)
         LastAlertStore.setUpcomingSigns(upcomingSigns())
-        DebugLog.appendFix(fix, match, LastAlertStore.tileStatus())
+        TripRecorder.recordFix(fix)
+        TripRecorder.recordAlerts(alerts)
+        DebugLog.appendFix(
+            fix = fix,
+            match = match,
+            tileStatus = LastAlertStore.tileStatus(),
+            holding = engine?.isHoldingMatch() == true,
+        )
         DebugLog.appendHorizon(
             match = match,
             horizon = engine?.currentHorizon().orEmpty(),
@@ -210,6 +220,7 @@ class TrackingService : Service() {
             val created = AlertEngine(graph, settings)
             engine = created
             graphIdentity = identity
+            refreshKartStatus(graph)
             DebugLog.append("GRAPH $identity links=${graph.links.size}")
             return created
         }
@@ -217,9 +228,18 @@ class TrackingService : Service() {
         if (graphIdentity != identity) {
             existing.updateGraph(graph)
             graphIdentity = identity
+            refreshKartStatus(graph)
             DebugLog.append("GRAPH $identity links=${graph.links.size}")
         }
         return existing
+    }
+
+    private fun refreshKartStatus(graph: no.skiltvarsler.tiles.RoadGraph) {
+        if (!GraphHolder.isReady()) {
+            return
+        }
+        val fileCount = graph.tileId.split('+').count { it.isNotBlank() }.coerceAtLeast(1)
+        LastAlertStore.setTileStatus(KartStatus.fromGraph(graph, fileCount))
     }
 
     private fun maybePrefetchForLocation() {
@@ -291,9 +311,19 @@ class TrackingService : Service() {
     override fun onDestroy() {
         fused.removeLocationUpdates(callback)
         scope.cancel()
+        val summary = TripRecorder.finish()
         LastAlertStore.setTrackingActive(false)
-        LastAlertStore.setTracking("Stoppet")
-        DebugLog.append("TRACKING stop")
+        LastAlertStore.setTracking(
+            if (summary != null) {
+                "Kjøretur ferdig"
+            } else {
+                "Stoppet"
+            },
+        )
+        DebugLog.append(
+            "TRIP stop alerts=${summary?.totalAlerts ?: 0} " +
+                "distance=${summary?.distanceMeters?.toInt() ?: 0}m",
+        )
         super.onDestroy()
     }
 

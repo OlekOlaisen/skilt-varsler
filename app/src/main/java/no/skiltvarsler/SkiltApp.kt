@@ -20,7 +20,7 @@ class SkiltApp : Application() {
         AlertNotifier.ensureChannels(this)
         DebugLog.init(this)
         GraphHolder.loadFromCache(File(filesDir, "tiles"))
-        LastAlertStore.setTileStatus("Klar. Start for å hente kommune-flis.")
+        LastAlertStore.setTileStatus("Klar. Start for å hente kart.")
         val manager = WorkManager.getInstance(this)
         val wifi = Constraints.Builder()
             .setRequiredNetworkType(NetworkType.UNMETERED)
