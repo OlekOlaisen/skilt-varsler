@@ -1,0 +1,34 @@
+{
+  "version": "20260907T154853Z",
+  "source": "fixture:datex_situation_sample.xml",
+  "situations": [
+    {
+      "id": "NPRA_FIXTURE_RING2_WORK",
+      "type": "roadwork",
+      "title": "Veiarbeid Kirkeveien (fixture)",
+      "description": "",
+      "points": [
+        [
+          59.9305,
+          10.7201
+        ]
+      ]
+    },
+    {
+      "id": "NPRA_FIXTURE_CLOSED_1",
+      "type": "closure",
+      "title": "Stengt kjørefelt (fixture)",
+      "description": "",
+      "points": [
+        [
+          59.9292,
+          10.7183
+        ],
+        [
+          59.9299,
+          10.7207
+        ]
+      ]
+    }
+  ]
+}

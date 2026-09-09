@@ -33,7 +33,7 @@ object SignAssetId {
             stemsFromPayload(payload)
         }
         val ordered = when (kind) {
-            AlertKind.HAZARD, AlertKind.WILDLIFE, AlertKind.RAILWAY ->
+            AlertKind.HAZARD, AlertKind.WILDLIFE, AlertKind.RAILWAY, AlertKind.ROADWORK ->
                 payloadStems + kindStems
             else -> kindStems + payloadStems
         }
@@ -90,6 +90,7 @@ object SignAssetId {
             AlertKind.FERRY -> listOf("775_0")
             AlertKind.TOLL -> listOf("792_30", "765_0")
             AlertKind.HAZARD -> listOf("156_0")
+            AlertKind.ROADWORK -> listOf("110_0")
             AlertKind.PRIORITY_ROAD -> listOf("206_0")
             AlertKind.MUNICIPALITY -> emptyList()
         }

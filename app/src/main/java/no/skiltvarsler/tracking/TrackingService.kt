@@ -30,6 +30,7 @@ import no.skiltvarsler.prefetch.ManifestTile
 import no.skiltvarsler.prefetch.TilePlanner
 import no.skiltvarsler.prefetch.TilePrefetch
 import no.skiltvarsler.settings.SettingsStore
+import no.skiltvarsler.situations.SituationsHolder
 import no.skiltvarsler.tiles.LatLon
 import no.skiltvarsler.tiles.TileSelector
 import no.skiltvarsler.tilesource.GraphHolder
@@ -218,6 +219,7 @@ class TrackingService : Service() {
         val existing = engine
         if (existing == null) {
             val created = AlertEngine(graph, settings)
+            created.updateSituations(situationsNearLastFix())
             engine = created
             graphIdentity = identity
             refreshKartStatus(graph)
@@ -225,6 +227,7 @@ class TrackingService : Service() {
             return created
         }
         existing.updateSettings(settings)
+        existing.updateSituations(situationsNearLastFix())
         if (graphIdentity != identity) {
             existing.updateGraph(graph)
             graphIdentity = identity
@@ -232,6 +235,15 @@ class TrackingService : Service() {
             DebugLog.append("GRAPH $identity links=${graph.links.size}")
         }
         return existing
+    }
+
+    private fun situationsNearLastFix(): List<no.skiltvarsler.matcher.TrafficSituation> {
+        val latitude = LastAlertStore.latitude
+        val longitude = LastAlertStore.longitude
+        if (latitude == null || longitude == null) {
+            return SituationsHolder.all()
+        }
+        return SituationsHolder.near(latitude, longitude)
     }
 
     private fun refreshKartStatus(graph: no.skiltvarsler.tiles.RoadGraph) {

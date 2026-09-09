@@ -66,6 +66,7 @@ fun SkiltAppScreen(
     var lastTitle by remember { mutableStateOf(LastAlertStore.current()?.title ?: "Ingen varsel ennå") }
     var lastBody by remember { mutableStateOf(LastAlertStore.current()?.body ?: "Start kjøretur eller test et varsel") }
     var autoStartAttempted by remember { mutableStateOf(false) }
+    var showingPrivacyPolicy by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
         if (!autoStartAttempted) {
@@ -96,6 +97,11 @@ fun SkiltAppScreen(
             }
             delay(400)
         }
+    }
+
+    if (showingPrivacyPolicy) {
+        PrivacyPolicyScreen(onClose = { showingPrivacyPolicy = false })
+        return
     }
 
     Scaffold(
@@ -176,6 +182,7 @@ fun SkiltAppScreen(
                     onAutoStartTrackingChange = { enabled ->
                         scope.launch { store.setAutoStartTracking(enabled) }
                     },
+                    onOpenPrivacyPolicy = { showingPrivacyPolicy = true },
                 )
             }
         }

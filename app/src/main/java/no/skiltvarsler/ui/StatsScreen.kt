@@ -153,6 +153,12 @@ fun StatsScreen(
                     value = summary.priorityRoads.toString(),
                     kind = AlertKind.PRIORITY_ROAD,
                 )
+                StatRow(
+                    label = "Veiarbeid (live)",
+                    value = summary.roadworks.toString(),
+                    kind = AlertKind.ROADWORK,
+                    payload = "roadwork",
+                )
                 StatRow(label = "Varsler totalt", value = summary.totalAlerts.toString())
                 Spacer(modifier = Modifier.height(8.dp))
             }

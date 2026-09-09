@@ -34,6 +34,7 @@ data class TripSummary(
     val speedLimits: Int,
     val municipalities: Int,
     val priorityRoads: Int,
+    val roadworks: Int,
     val totalAlerts: Int,
 ) {
     val durationMs: Long
@@ -132,6 +133,7 @@ object TripRecorder {
         private var speedLimits = 0
         private var municipalities = 0
         private var priorityRoads = 0
+        private var roadworks = 0
         private var totalAlerts = 0
         private val tolls = ArrayList<TollPassage>()
         private val seenNvdbIds = HashSet<Long>()
@@ -175,6 +177,7 @@ object TripRecorder {
                     AlertKind.SPEED_LIMIT -> speedLimits += 1
                     AlertKind.MUNICIPALITY -> municipalities += 1
                     AlertKind.PRIORITY_ROAD -> priorityRoads += 1
+                    AlertKind.ROADWORK -> roadworks += 1
                 }
             }
         }
@@ -204,6 +207,7 @@ object TripRecorder {
                 speedLimits = speedLimits,
                 municipalities = municipalities,
                 priorityRoads = priorityRoads,
+                roadworks = roadworks,
                 totalAlerts = totalAlerts,
             )
         }

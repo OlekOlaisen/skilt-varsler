@@ -1,5 +1,7 @@
 package no.skiltvarsler.ui
 
+import android.content.Intent
+import android.net.Uri
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -9,13 +11,17 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import no.skiltvarsler.legal.LegalCopy
 
 @Composable
 fun SettingsScreen(
@@ -23,7 +29,9 @@ fun SettingsScreen(
     onAlertsMutedChange: (Boolean) -> Unit,
     autoStartTracking: Boolean,
     onAutoStartTrackingChange: (Boolean) -> Unit,
+    onOpenPrivacyPolicy: () -> Unit,
 ) {
+    val context = LocalContext.current
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -33,7 +41,7 @@ fun SettingsScreen(
     ) {
         Text("Innstillinger", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold)
         Text(
-            "Kart hentes automatisk fra GitHub når du kjører.",
+            "Kart hentes automatisk når du kjører.",
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.secondary,
         )
@@ -76,15 +84,35 @@ fun SettingsScreen(
             )
         }
         Text(
-            "Appen er sideloadet. I Android Auto-innstillinger på telefonen: slå på utviklerinnstillinger, tillat ukjente kilder, koble til bilen, og pin Skilt-varsler under Tilpass startside.",
+            "Pin Skilt-varsler under Tilpass startside i Android Auto. Varsler vises som heads-up mens du navigerer.",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.secondary,
+        )
+        Text("Ansvar", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+        Text(
+            LegalCopy.SHORT_DISCLAIMER,
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.secondary,
         )
         Text("Personvern", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
         Text(
-            "Posisjon brukes bare på telefonen til å treffe vegnettet. Appen har ikke konto eller analyse. Telefonen treffer aldri NVDB.",
+            LegalCopy.SHORT_PRIVACY,
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.secondary,
         )
+        OutlinedButton(
+            onClick = onOpenPrivacyPolicy,
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Text("Les personvernerklæring")
+        }
+        TextButton(
+            onClick = {
+                val intent = Intent(Intent.ACTION_VIEW, Uri.parse(LegalCopy.PRIVACY_POLICY_URL))
+                context.startActivity(intent)
+            },
+        ) {
+            Text("Åpne personvernerklæring på nettet")
+        }
     }
 }

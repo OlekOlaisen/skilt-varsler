@@ -1,0 +1,49 @@
+name: DATEX situations
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "40 */2 * * *"
+
+permissions:
+  contents: write
+
+jobs:
+  situations:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: Install
+        run: pip install -r pipeline/requirements.txt
+      - name: Build situations.json
+        working-directory: pipeline
+        env:
+          DATEX_USER: ${{ secrets.DATEX_USER }}
+          DATEX_PASSWORD: ${{ secrets.DATEX_PASSWORD }}
+        run: |
+          mkdir -p situations-out
+          if [ -n "$DATEX_USER" ] && [ -n "$DATEX_PASSWORD" ]; then
+            python -m skiltvarsler_pipeline --build-situations --situations-out situations-out/situations.json
+          else
+            echo "DATEX secrets mangler — bygger fixture"
+            python -m skiltvarsler_pipeline --build-situations \
+              --fixture tests/fixtures/datex_situation_sample.xml \
+              --situations-out situations-out/situations.json
+          fi
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          payload = json.loads(Path("situations-out/situations.json").read_text(encoding="utf-8"))
+          print(f"situations={len(payload.get('situations') or [])} source={payload.get('source')}")
+          PY
+      - name: Upload to nvdb-tiles release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release upload nvdb-tiles pipeline/situations-out/situations.json --clobber || \
+          gh release create nvdb-tiles pipeline/situations-out/situations.json \
+            --title "NVDB-fliser" \
+            --notes "Situations feed for live roadworks (DATEX)."

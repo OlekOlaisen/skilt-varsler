@@ -21,9 +21,14 @@ class AlertEngine(
     private var lastInsideSectionAtk = HashSet<Long>()
     private var lastInsidePriority = HashSet<Long>()
     private var lastHorizon: List<HorizonCandidate> = emptyList()
+    private var situations: List<TrafficSituation> = emptyList()
 
     fun updateSettings(next: AlertSettings) {
         settings = next
+    }
+
+    fun updateSituations(next: List<TrafficSituation>) {
+        situations = next
     }
 
     /**
@@ -56,11 +61,6 @@ class AlertEngine(
 
     fun update(fix: GpsFix): List<Alert> {
         val match = matcher.update(fix)
-        if (match == null) {
-            lastHorizon = emptyList()
-            return emptyList()
-        }
-        refreshHorizon(match, fix.speedMetersPerSecond)
         val speed = fix.speedMetersPerSecond
         val driving = speed >= AlertWindows.MIN_DRIVING_SPEED_METERS_PER_SECOND
         /**
@@ -68,6 +68,14 @@ class AlertEngine(
          * and the upcoming-sign list stay accurate during a silent drive.
          */
         val alerting = driving
+        if (match == null) {
+            lastHorizon = emptyList()
+            val alerts = ArrayList<Alert>()
+            collectRoadworks(fix, alerting, speed)?.let { alerts.add(it) }
+            pruneFired()
+            return alerts.sortedByDescending { it.kind.priority }.take(maxQueue)
+        }
+        refreshHorizon(match, fix.speedMetersPerSecond)
         refreshPriorityStay(match, speed, fix.timeMs)
         val alerts = ArrayList<Alert>()
 
@@ -88,6 +96,7 @@ class AlertEngine(
             alerting,
         )?.let { alerts.add(it) }
         collectSectionAtkExit(match, alerting)?.let { alerts.add(it) }
+        collectRoadworks(fix, alerting, speed)?.let { alerts.add(it) }
 
         if (!driving) {
             updatePriorityMembership(match)
@@ -139,6 +148,39 @@ class AlertEngine(
 
         pruneFired()
         return alerts.sortedByDescending { it.kind.priority }.take(maxQueue)
+    }
+
+    private fun collectRoadworks(fix: GpsFix, alerting: Boolean, speed: Double): Alert? {
+        if (!alerting || !settings.enabled(AlertKind.ROADWORK)) {
+            return null
+        }
+        if (situations.isEmpty()) {
+            return null
+        }
+        val hit = SituationIndex.nearestAhead(
+            position = fix.position,
+            bearingDegrees = fix.bearingDegrees,
+            situations = situations,
+            maxMeters = AlertWindows.window(AlertKind.ROADWORK).maxMeters + 80.0,
+        ) ?: return null
+        if (!shouldFire(AlertKind.ROADWORK, hit.metersAway, speed)) {
+            return null
+        }
+        val key = fireKey(AlertKind.ROADWORK, hit.situation.alertId)
+        if (!fired.add(key)) {
+            return null
+        }
+        val payload = hit.situation.payload
+        return Alert(
+            kind = AlertKind.ROADWORK,
+            nvdbId = hit.situation.alertId,
+            metersAhead = hit.metersAway,
+            title = AlertCopy.titleFor(AlertKind.ROADWORK, payload),
+            body = AlertCopy.bodyFor(AlertKind.ROADWORK, hit.metersAway, payload),
+            sequenceId = 0L,
+            objectType = null,
+            payload = payload,
+        )
     }
 
     private fun refreshHorizon(match: Match, speedMetersPerSecond: Double) {

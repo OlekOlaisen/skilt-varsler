@@ -105,6 +105,10 @@ object AlertCopy {
             AlertKind.SECTION_ATK_END -> "Slutt streknings-ATK"
             AlertKind.WILDLIFE -> wildlifeTitle(payload)
             AlertKind.SPEED_LIMIT -> payload
+            AlertKind.ROADWORK -> namedOrFallback(
+                parsed,
+                SituationType.fromWire(parsed.code)?.defaultTitle ?: "Veiarbeid",
+            )
         }
     }
 
@@ -137,6 +141,7 @@ object AlertCopy {
                 val meters = parsed.extra.toDoubleOrNull()
                 if (meters != null && meters >= 1.0) formatLengthMeters(meters) else ""
             }
+            AlertKind.ROADWORK -> parsed.extra
             else -> ""
         }
     }

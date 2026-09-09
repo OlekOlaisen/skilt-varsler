@@ -39,6 +39,7 @@ enum class AlertKind {
     STOP,
     YIELD,
     HAZARD,
+    ROADWORK,
     PRIORITY_ROAD,
     MUNICIPALITY,
     ;
@@ -48,7 +49,7 @@ enum class AlertKind {
             STOP, SPEED_CAMERA -> 100
             RAILWAY, YIELD -> 80
             SECTION_ATK_START, SECTION_ATK_END -> 70
-            SPEED_LIMIT, TOLL -> 60
+            SPEED_LIMIT, TOLL, ROADWORK -> 60
             HAZARD, FERRY, WILDLIFE, PRIORITY_ROAD -> 40
             MUNICIPALITY -> 10
         }

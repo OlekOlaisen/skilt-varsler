@@ -5,6 +5,9 @@ build/
 *.iml
 .DS_Store
 local.properties
+keystore.properties
+*.jks
+*.keystore
 captures/
 .cxx/
 *.apk

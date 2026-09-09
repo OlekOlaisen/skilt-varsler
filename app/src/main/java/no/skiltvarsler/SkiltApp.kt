@@ -8,6 +8,7 @@ import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import no.skiltvarsler.log.DebugLog
 import no.skiltvarsler.prefetch.TilePrefetchWorker
+import no.skiltvarsler.situations.SituationsHolder
 import no.skiltvarsler.tilesource.GraphHolder
 import no.skiltvarsler.tracking.AlertNotifier
 import no.skiltvarsler.tracking.LastAlertStore
@@ -20,6 +21,7 @@ class SkiltApp : Application() {
         AlertNotifier.ensureChannels(this)
         DebugLog.init(this)
         GraphHolder.loadFromCache(File(filesDir, "tiles"))
+        loadSituations()
         LastAlertStore.setTileStatus("Klar. Start for å hente kart.")
         val manager = WorkManager.getInstance(this)
         val wifi = Constraints.Builder()
@@ -42,5 +44,19 @@ class SkiltApp : Application() {
                 .setConstraints(anyNet)
                 .build(),
         )
+    }
+
+    private fun loadSituations() {
+        val cached = File(filesDir, "situations/${SituationsHolder.FILE_NAME}")
+        if (SituationsHolder.loadFile(cached)) {
+            return
+        }
+        try {
+            assets.open("situations/${SituationsHolder.FILE_NAME}").bufferedReader().use { reader ->
+                SituationsHolder.loadJson(reader.readText())
+            }
+        } catch (_: Exception) {
+            // Live DATEX feed is optional until credentials and release assets exist.
+        }
     }
 }

@@ -84,6 +84,7 @@ class SettingsStore(private val context: Context) {
             "hazard",
             "priorityRoad",
             "municipality",
+            "roadwork",
         )
 
         private fun signKey(id: String) = "sign:$id"

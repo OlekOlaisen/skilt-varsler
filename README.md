@@ -49,13 +49,11 @@ Requires Android 10 or newer.
 
 ## Android Auto
 
-The app is sideloaded, so Android Auto must allow unknown sources:
+1. Install from Play (or a trusted build).
+2. Connect to the car and grant location and notification access.
+3. Pin Skilt-varsler on the Android Auto launcher (Customize launcher).
 
-1. Open Android Auto settings on the phone.
-2. Enable developer settings (tap the version number repeatedly).
-3. Allow unknown sources.
-4. Connect to the car and grant location and notification access.
-5. Pin Skilt-varsler on the Android Auto launcher (Customize launcher).
+During development, sideloaded builds may still require “unknown sources” in Android Auto developer settings.
 
 Alerts can then show as heads-up over the map while you navigate.
 
@@ -63,4 +61,10 @@ Alerts can then show as heads-up over the map while you navigate.
 
 Location is used only on the phone to match roads and signs. The app does not need an account or analytics. Phones download static map tiles; they never contact [NVDB](https://www.vegvesen.no/nvdb).
 
+Full policy: [docs/privacy-policy.md](docs/privacy-policy.md). Play Console checklist: [docs/play-console.md](docs/play-console.md).
+
 Road data is published by Statens vegvesen under [NLOD](https://data.norge.no/nlod/no/).
+
+## Disclaimer
+
+Skilt-varsler is a driving aid. It does not replace road signs, navigation, or traffic rules. You remain responsible for your own driving.

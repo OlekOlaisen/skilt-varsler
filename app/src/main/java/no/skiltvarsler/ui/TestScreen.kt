@@ -75,7 +75,8 @@ fun TestScreen(
         }
         item {
             Text(
-                "Sender ekte varsler på telefonen (og Auto hvis tilkoblet). GPS-replay bruker faste spor " +
+                "Kun for utvikling. Replay og debug-logg brukes til å verifisere matching og varsler før lansering. " +
+                    "Sender ekte varsler på telefonen (og Auto hvis tilkoblet). GPS-replay bruker faste spor " +
                     "og simulerer tunnel-hold.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.secondary,

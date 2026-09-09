@@ -17,6 +17,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import no.skiltvarsler.legal.LegalCopy
 import no.skiltvarsler.matcher.Alert
 
 @Composable
@@ -54,7 +55,7 @@ fun HomeScreen(
                 style = MaterialTheme.typography.titleLarge,
             )
         }
-        StatusCard(title = "Kjøretur", value = tripStatus, subtitle = "Posisjon forlater ikke telefonen")
+        StatusCard(title = "Kjøretur", value = tripStatus, subtitle = "Posisjon brukes bare under aktiv kjøretur")
         StatusCard(title = "Siste varsel", value = lastTitle, subtitle = lastBody, alert = lastAlert)
         StatusCard(
             title = "Kart",
@@ -62,7 +63,13 @@ fun HomeScreen(
             subtitle = "Hentes automatisk for kommunene rundt deg.",
         )
         Text(
-            "Android Auto: slå på Ukjente kilder i Auto-utviklerinnstillinger, og pin Skilt-varsler under Tilpass startside.",
+            "Android Auto: pin Skilt-varsler under Tilpass startside for heads-up over kartet.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.secondary,
+            modifier = Modifier.align(Alignment.Start),
+        )
+        Text(
+            LegalCopy.SHORT_DISCLAIMER,
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.secondary,
             modifier = Modifier.align(Alignment.Start),

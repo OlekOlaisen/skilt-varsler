@@ -16,6 +16,7 @@ import no.skiltvarsler.matcher.TraceGraph
 import no.skiltvarsler.matcher.e6NorthLink
 import no.skiltvarsler.prefetch.TilePlanner
 import no.skiltvarsler.settings.SettingsStore
+import no.skiltvarsler.situations.SituationsHolder
 import no.skiltvarsler.tiles.Geo
 import no.skiltvarsler.tiles.LatLon
 import no.skiltvarsler.tiles.RoadGraph
@@ -100,9 +101,18 @@ object ReplayRunner {
                 )
             }
             val engine = AlertEngine(graph, settings)
+            val center = traceCenter(clean)
+            engine.updateSituations(
+                SituationsHolder.near(center.latitude, center.longitude),
+            )
             var holdSamples = 0
             var alertCount = 0
             for ((index, fix) in clean.withIndex()) {
+                if (index % 35 == 0) {
+                    engine.updateSituations(
+                        SituationsHolder.near(fix.position.latitude, fix.position.longitude),
+                    )
+                }
                 val alerts = engine.update(fix)
                 TripRecorder.recordFix(fix)
                 TripRecorder.recordAlerts(alerts)

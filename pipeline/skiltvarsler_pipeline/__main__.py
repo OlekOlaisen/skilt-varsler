@@ -6,6 +6,7 @@ import sys
 from pathlib import Path
 
 from .build import build_kommune, kommuner_from_changelog, merge_release, norway_grid, plan_chunks
+from .datex import build_situations
 from .nvdb import NvdbClient
 
 
@@ -48,7 +49,28 @@ def main() -> None:
     parser.add_argument("--print-grid", action="store_true", help="Skriv nasjonalt rutenett til stdout")
     parser.add_argument("--plan-chunks", type=int, metavar="SIZE", help="Skriv JSON-chunks for GitHub Actions")
     parser.add_argument("--merge-release", nargs=3, metavar=("EXISTING", "INCOMING", "OUT"))
+    parser.add_argument(
+        "--build-situations",
+        action="store_true",
+        help="Bygg situations.json fra DATEX eller --fixture",
+    )
+    parser.add_argument(
+        "--fixture",
+        type=Path,
+        help="DATEX XML-fixture (brukes med --build-situations)",
+    )
+    parser.add_argument(
+        "--situations-out",
+        type=Path,
+        default=None,
+        help="Output-fil for situations.json (default: <out>/situations.json)",
+    )
     args = parser.parse_args()
+    if args.build_situations:
+        output = args.situations_out or (args.out / "situations.json")
+        path = build_situations(output=output, fixture=args.fixture)
+        print(f"Skrev {path}")
+        return
     if args.print_grid:
         print(json.dumps(norway_grid(), indent=2))
         return

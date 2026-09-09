@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<d2LogicalModel xmlns="http://datex2.eu/schema/3/d2Payload"
+                xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                xmlns:sit="http://datex2.eu/schema/3/situation"
+                xmlns:com="http://datex2.eu/schema/3/common"
+                xmlns:loc="http://datex2.eu/schema/3/locationReferencing"
+                modelBaseVersion="3">
+  <payloadPublication xsi:type="sit:SituationPublication" lang="no">
+    <com:publicationTime>2026-09-07T12:00:00Z</com:publicationTime>
+    <sit:situation id="NPRA_FIXTURE_RING2">
+      <sit:situationRecord xsi:type="sit:ConstructionWorks" id="NPRA_FIXTURE_RING2_WORK" version="1">
+        <sit:situationRecordCreationTime>2026-09-07T10:00:00Z</sit:situationRecordCreationTime>
+        <sit:situationRecordVersionTime>2026-09-07T10:00:00Z</sit:situationRecordVersionTime>
+        <sit:probabilityOfOccurrence>certain</sit:probabilityOfOccurrence>
+        <com:generalPublicComment>
+          <com:comment>
+            <com:values>
+              <com:value lang="no">Veiarbeid Kirkeveien (fixture)</com:value>
+            </com:values>
+          </com:comment>
+        </com:generalPublicComment>
+        <sit:groupOfLocations>
+          <loc:locationEnclosed>
+            <loc:pointByCoordinates>
+              <loc:pointCoordinates>
+                <loc:latitude>59.9305</loc:latitude>
+                <loc:longitude>10.7201</loc:longitude>
+              </loc:pointCoordinates>
+            </loc:pointByCoordinates>
+          </loc:locationEnclosed>
+        </sit:groupOfLocations>
+      </sit:situationRecord>
+    </sit:situation>
+    <sit:situation id="NPRA_FIXTURE_CLOSED">
+      <sit:situationRecord xsi:type="sit:RoadOrCarriagewayOrLaneManagement" id="NPRA_FIXTURE_CLOSED_1" version="1">
+        <sit:situationRecordCreationTime>2026-09-07T10:00:00Z</sit:situationRecordCreationTime>
+        <sit:situationRecordVersionTime>2026-09-07T10:00:00Z</sit:situationRecordVersionTime>
+        <sit:probabilityOfOccurrence>certain</sit:probabilityOfOccurrence>
+        <com:generalPublicComment>
+          <com:comment>
+            <com:values>
+              <com:value lang="no">Stengt kjørefelt (fixture)</com:value>
+            </com:values>
+          </com:comment>
+        </com:generalPublicComment>
+        <sit:roadOrCarriagewayOrLaneManagementType>carriagewayClosures</sit:roadOrCarriagewayOrLaneManagementType>
+        <sit:groupOfLocations>
+          <loc:locationEnclosed>
+            <loc:linearByCoordinates>
+              <loc:gmlPos>59.9292 10.7183</loc:gmlPos>
+              <loc:gmlPos>59.9299 10.7207</loc:gmlPos>
+            </loc:linearByCoordinates>
+          </loc:locationEnclosed>
+        </sit:groupOfLocations>
+      </sit:situationRecord>
+    </sit:situation>
+  </payloadPublication>
+</d2LogicalModel>

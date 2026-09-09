@@ -74,6 +74,6 @@ object TestAlerts {
         AlertKind.HAZARD -> RoadObjectType.HAZARD
         AlertKind.PRIORITY_ROAD -> RoadObjectType.PRIORITY_ROAD
         AlertKind.MUNICIPALITY -> RoadObjectType.MUNICIPALITY
-        AlertKind.SPEED_LIMIT -> null
+        AlertKind.SPEED_LIMIT, AlertKind.ROADWORK -> null
     }
 }

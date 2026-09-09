@@ -4,6 +4,17 @@ plugins {
     alias(libs.plugins.kotlin.compose)
 }
 
+import java.util.Properties
+
+val keystorePropertiesFile = rootProject.file("keystore.properties")
+val keystoreProperties = Properties().apply {
+    if (keystorePropertiesFile.exists()) {
+        keystorePropertiesFile.inputStream().use { load(it) }
+    }
+}
+val hasReleaseKeystore = keystorePropertiesFile.exists() &&
+    keystoreProperties.getProperty("storeFile") != null
+
 android {
     namespace = "no.skiltvarsler"
     compileSdk = 35
@@ -17,16 +28,38 @@ android {
         val tileBaseUrl = (project.findProperty("tileBaseUrl") as String?)
             ?: "https://github.com/OlekOlaisen/skilt-varsler/releases/latest/download"
         buildConfigField("String", "TILE_BASE_URL", "\"$tileBaseUrl\"")
+        buildConfigField(
+            "String",
+            "PRIVACY_POLICY_URL",
+            "\"https://github.com/OlekOlaisen/skilt-varsler/blob/main/docs/privacy-policy.md\"",
+        )
+    }
+
+    signingConfigs {
+        if (hasReleaseKeystore) {
+            create("release") {
+                storeFile = rootProject.file(keystoreProperties.getProperty("storeFile"))
+                storePassword = keystoreProperties.getProperty("storePassword")
+                keyAlias = keystoreProperties.getProperty("keyAlias")
+                keyPassword = keystoreProperties.getProperty("keyPassword")
+            }
+        }
     }
 
     buildTypes {
         release {
-            isMinifyEnabled = false
-            signingConfig = signingConfigs.getByName("debug")
+            isMinifyEnabled = true
+            isShrinkResources = true
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro",
             )
+            signingConfig = if (hasReleaseKeystore) {
+                signingConfigs.getByName("release")
+            } else {
+                // Dev fallback only — Play uploads require keystore.properties.
+                signingConfigs.getByName("debug")
+            }
         }
     }
 
