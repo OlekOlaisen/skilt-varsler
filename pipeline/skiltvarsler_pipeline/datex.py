@@ -158,25 +158,33 @@ def classify_record(record: ET.Element) -> str | None:
 
 
 def record_title(record: ET.Element, situation_type: str) -> str:
-    comment = first_text(
-        record,
-        {
-            "value",
-            "comment",
-            "generalPublicComment",
-            "situationRecordExtension",
-        },
-    )
-    # Prefer short Norwegian-looking public comment lines.
+    values: list[str] = []
     for child in record.iter():
-        if local_name(child.tag) == "value":
-            value = text_of(child)
-            if value and len(value) >= 3:
-                comment = value
-                break
-    if comment:
-        return comment.split("\n")[0].strip()[:120]
-    return "Veiarbeid" if situation_type == "roadwork" else "Stengt veg"
+        if local_name(child.tag) != "value":
+            continue
+        value = text_of(child).replace(".dataProcessingNote", "").strip()
+        if not value:
+            continue
+        if value.upper() in {"NPRA", "SVV", "NO", "NORWAY"}:
+            continue
+        values.append(value)
+
+    for value in values:
+        lowered = value.lower()
+        if "vegarbeid" in lowered or "stengt" in lowered or "omkj" in lowered:
+            return value.split("|")[0].strip()[:120]
+
+    for value in values:
+        if len(value) >= 24 and any(token in value for token in ("Fv.", "Rv.", "E6", "E18", "E39", " i ")):
+            return value[:120]
+
+    road_number = first_text(record, {"roadNumber"})
+    default = "Veiarbeid" if situation_type == "roadwork" else "Stengt veg"
+    if road_number:
+        return f"{default} {road_number}"[:120]
+    if values:
+        return values[0].split("|")[0].strip()[:120]
+    return default
 
 
 def parse_situation_xml(xml_text: str) -> list[SituationOut]:
@@ -228,7 +236,8 @@ def fetch_datex_xml(user: str, password: str, url: str = DATEX_SITUATION_URL) ->
         url,
         headers={
             "Authorization": f"Basic {token}",
-            "Accept": "application/xml",
+            # Vegvesen DATEX returns 406 for application/xml; text/xml is accepted.
+            "Accept": "text/xml",
             "User-Agent": "skilt-varsler-pipeline",
         },
     )

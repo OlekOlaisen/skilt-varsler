@@ -25,6 +25,7 @@ tiles-out/
 pipeline/tiles-out/
 pipeline/merged/
 pipeline/existing/
+pipeline/situations-out/
 .cursor/
 *.log
 .vscode/
