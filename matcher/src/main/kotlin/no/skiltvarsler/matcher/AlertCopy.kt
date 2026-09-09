@@ -109,6 +109,10 @@ object AlertCopy {
                 parsed,
                 SituationType.fromWire(parsed.code)?.defaultTitle ?: "Veiarbeid",
             )
+            AlertKind.ACCIDENT -> namedOrFallback(
+                parsed,
+                SituationType.fromWire(parsed.code)?.defaultTitle ?: "Trafikkulykke",
+            )
         }
     }
 
@@ -141,7 +145,7 @@ object AlertCopy {
                 val meters = parsed.extra.toDoubleOrNull()
                 if (meters != null && meters >= 1.0) formatLengthMeters(meters) else ""
             }
-            AlertKind.ROADWORK -> parsed.extra
+            AlertKind.ROADWORK, AlertKind.ACCIDENT -> parsed.extra
             else -> ""
         }
     }

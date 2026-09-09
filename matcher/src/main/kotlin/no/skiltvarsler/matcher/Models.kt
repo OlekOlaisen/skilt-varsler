@@ -40,6 +40,7 @@ enum class AlertKind {
     YIELD,
     HAZARD,
     ROADWORK,
+    ACCIDENT,
     PRIORITY_ROAD,
     MUNICIPALITY,
     ;
@@ -47,6 +48,7 @@ enum class AlertKind {
     val priority: Int
         get() = when (this) {
             STOP, SPEED_CAMERA -> 100
+            ACCIDENT -> 90
             RAILWAY, YIELD -> 80
             SECTION_ATK_START, SECTION_ATK_END -> 70
             SPEED_LIMIT, TOLL, ROADWORK -> 60

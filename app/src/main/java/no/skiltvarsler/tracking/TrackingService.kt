@@ -30,6 +30,7 @@ import no.skiltvarsler.prefetch.ManifestTile
 import no.skiltvarsler.prefetch.TilePlanner
 import no.skiltvarsler.prefetch.TilePrefetch
 import no.skiltvarsler.settings.SettingsStore
+import no.skiltvarsler.situations.SituationsDownloader
 import no.skiltvarsler.situations.SituationsHolder
 import no.skiltvarsler.tiles.LatLon
 import no.skiltvarsler.tiles.TileSelector
@@ -59,6 +60,7 @@ class TrackingService : Service() {
                 if (location.hasBearing()) location.bearing.toDouble() else null,
             )
             maybePrefetchForLocation()
+            maybeRefreshSituations()
             val fix = GpsFix(
                 timeMs = location.time,
                 position = LatLon(location.latitude, location.longitude),
@@ -139,6 +141,13 @@ class TrackingService : Service() {
         seedLastLocation()
         if (LastAlertStore.latitude != null) {
             TilePrefetch.enqueueNow(this)
+        }
+        scope.launch {
+            SituationsDownloader.refreshIfStale(
+                this@TrackingService,
+                force = true,
+            )
+            engine?.updateSituations(situationsNearLastFix())
         }
         val request = LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, 1000L)
             .setMinUpdateIntervalMillis(800L)
@@ -287,6 +296,15 @@ class TrackingService : Service() {
         if (!enqueuePrefetch(now)) return
         lastCoverageKey = coverageKey
         lastEmptyPrefetchMs = now
+    }
+
+    private fun maybeRefreshSituations() {
+        scope.launch {
+            val refreshed = SituationsDownloader.refreshIfStale(this@TrackingService)
+            if (refreshed) {
+                engine?.updateSituations(situationsNearLastFix())
+            }
+        }
     }
 
     /**

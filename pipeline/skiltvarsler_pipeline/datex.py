@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import re
@@ -12,14 +13,48 @@ from typing import Iterable
 from urllib.request import Request, urlopen
 from xml.etree import ElementTree as ET
 
-DATEX_SITUATION_URL = (
+DATEX_BASE_URL = (
     "https://datex-server-get-v3-1.atlas.vegvesen.no/"
     "datexapi/GetSituation/pullsnapshotdata"
 )
 
+# Filtered pulls are much smaller than the national snapshot and are preferred.
+DATEX_FILTER_URLS = {
+    "Accident": f"{DATEX_BASE_URL}/filter/Accident",
+    "ConstructionWorks": f"{DATEX_BASE_URL}/filter/ConstructionWorks",
+    "MaintenanceWorks": f"{DATEX_BASE_URL}/filter/MaintenanceWorks",
+    "RoadOrCarriagewayOrLaneManagement": (
+        f"{DATEX_BASE_URL}/filter/RoadOrCarriagewayOrLaneManagement"
+    ),
+}
+
+DATEX_PROFILES: dict[str, list[str]] = {
+    "accidents": ["Accident"],
+    "roadworks": [
+        "ConstructionWorks",
+        "MaintenanceWorks",
+        "RoadOrCarriagewayOrLaneManagement",
+    ],
+    "all": [
+        "Accident",
+        "ConstructionWorks",
+        "MaintenanceWorks",
+        "RoadOrCarriagewayOrLaneManagement",
+    ],
+}
+
+PROFILE_REPLACE_TYPES: dict[str, set[str]] = {
+    "accidents": {"accident"},
+    "roadworks": {"roadwork", "closure"},
+    "all": {"accident", "roadwork", "closure"},
+}
+
 ROADWORK_TYPES = {
     "ConstructionWorks",
     "MaintenanceWorks",
+}
+ACCIDENT_TYPES = {
+    "Accident",
 }
 CLOSURE_HINTS = {
     "RoadOrCarriagewayOrLaneManagement",
@@ -140,6 +175,8 @@ def classify_record(record: ET.Element) -> str | None:
         "MaintenanceWorks",
     ):
         return "roadwork"
+    if type_name in ACCIDENT_TYPES or type_name.endswith("Accident"):
+        return "accident"
     if type_name in CLOSURE_HINTS or "LaneManagement" in type_name or "NetworkManagement" in type_name:
         lowered = text_of(record).lower()
         if any(
@@ -171,7 +208,17 @@ def record_title(record: ET.Element, situation_type: str) -> str:
 
     for value in values:
         lowered = value.lower()
-        if "vegarbeid" in lowered or "stengt" in lowered or "omkj" in lowered:
+        if any(
+            token in lowered
+            for token in (
+                "vegarbeid",
+                "stengt",
+                "omkj",
+                "ulykke",
+                "kollisjon",
+                "accident",
+            )
+        ):
             return value.split("|")[0].strip()[:120]
 
     for value in values:
@@ -179,7 +226,11 @@ def record_title(record: ET.Element, situation_type: str) -> str:
             return value[:120]
 
     road_number = first_text(record, {"roadNumber"})
-    default = "Veiarbeid" if situation_type == "roadwork" else "Stengt veg"
+    default = {
+        "roadwork": "Veiarbeid",
+        "accident": "Trafikkulykke",
+        "closure": "Stengt veg",
+    }.get(situation_type, "Trafikkmelding")
     if road_number:
         return f"{default} {road_number}"[:120]
     if values:
@@ -213,6 +264,59 @@ def parse_situation_xml(xml_text: str) -> list[SituationOut]:
     return situations
 
 
+def dedupe_situations(situations: list[SituationOut]) -> list[SituationOut]:
+    by_id: dict[str, SituationOut] = {}
+    for item in situations:
+        by_id[item.id] = item
+    return list(by_id.values())
+
+
+def merge_situations(
+    existing: list[SituationOut],
+    incoming: list[SituationOut],
+    replace_types: set[str],
+) -> list[SituationOut]:
+    """Replace situations of replace_types; keep other types from existing."""
+    kept = [item for item in existing if item.type not in replace_types]
+    return dedupe_situations(kept + incoming)
+
+
+def load_situations_json(path: Path) -> list[SituationOut]:
+    if not path.exists() or path.stat().st_size < 8:
+        return []
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    items: list[SituationOut] = []
+    for raw in payload.get("situations") or []:
+        points = raw.get("points") or []
+        if not points:
+            continue
+        items.append(
+            SituationOut(
+                id=str(raw.get("id") or f"anon-{len(items)+1}"),
+                type=str(raw.get("type") or "roadwork"),
+                title=str(raw.get("title") or ""),
+                description=str(raw.get("description") or ""),
+                points=[[float(pair[0]), float(pair[1])] for pair in points if len(pair) >= 2],
+            ),
+        )
+    return items
+
+
+def situations_fingerprint(situations: list[SituationOut]) -> str:
+    payload = [
+        {
+            "id": item.id,
+            "type": item.type,
+            "title": item.title,
+            "description": item.description,
+            "points": item.points,
+        }
+        for item in sorted(situations, key=lambda item: item.id)
+    ]
+    encoded = json.dumps(payload, ensure_ascii=False, separators=(",", ":"), sort_keys=True)
+    return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
+
+
 def write_situations_json(
     situations: list[SituationOut],
     output: Path,
@@ -228,7 +332,7 @@ def write_situations_json(
     return output
 
 
-def fetch_datex_xml(user: str, password: str, url: str = DATEX_SITUATION_URL) -> str:
+def fetch_datex_xml(user: str, password: str, url: str = DATEX_BASE_URL) -> str:
     import base64
 
     token = base64.b64encode(f"{user}:{password}".encode("utf-8")).decode("ascii")
@@ -245,14 +349,40 @@ def fetch_datex_xml(user: str, password: str, url: str = DATEX_SITUATION_URL) ->
         return response.read().decode("utf-8")
 
 
+def fetch_profile_situations(
+    profile: str,
+    user: str,
+    password: str,
+) -> tuple[list[SituationOut], str]:
+    filters = DATEX_PROFILES.get(profile)
+    if not filters:
+        raise SystemExit(f"Ukjent DATEX-profil: {profile}")
+    collected: list[SituationOut] = []
+    used: list[str] = []
+    for filter_name in filters:
+        url = DATEX_FILTER_URLS[filter_name]
+        xml_text = fetch_datex_xml(user, password, url=url)
+        parsed = parse_situation_xml(xml_text)
+        collected.extend(parsed)
+        used.append(f"{filter_name}:{len(parsed)}")
+    return dedupe_situations(collected), "datex-filters:" + ",".join(used)
+
+
 def build_situations(
     output: Path,
     fixture: Path | None = None,
     user: str | None = None,
     password: str | None = None,
-) -> Path:
+    profile: str = "all",
+    merge_with: Path | None = None,
+    skip_if_unchanged: bool = False,
+) -> Path | None:
+    if profile not in DATEX_PROFILES:
+        raise SystemExit(f"Ukjent DATEX-profil: {profile}. Gyldige: {', '.join(DATEX_PROFILES)}")
+
     if fixture is not None:
         xml_text = fixture.read_text(encoding="utf-8")
+        incoming = parse_situation_xml(xml_text)
         source = f"fixture:{fixture.name}"
     else:
         resolved_user = user or os.environ.get("DATEX_USER") or ""
@@ -261,7 +391,25 @@ def build_situations(
             raise SystemExit(
                 "DATEX credentials mangler. Sett DATEX_USER/DATEX_PASSWORD eller bruk --fixture.",
             )
-        xml_text = fetch_datex_xml(resolved_user, resolved_password)
-        source = "datex"
-    situations = parse_situation_xml(xml_text)
+        incoming, source = fetch_profile_situations(profile, resolved_user, resolved_password)
+
+    replace_types = PROFILE_REPLACE_TYPES[profile]
+    if profile != "all":
+        incoming = [item for item in incoming if item.type in replace_types]
+
+    existing: list[SituationOut] = []
+    if merge_with is not None:
+        existing = load_situations_json(merge_with)
+
+    if existing and (profile != "all" or merge_with is not None):
+        situations = merge_situations(existing, incoming, replace_types)
+        if merge_with is not None:
+            source = f"{source}+merge:{merge_with.name}"
+    else:
+        situations = dedupe_situations(incoming)
+
+    if skip_if_unchanged and merge_with is not None and merge_with.exists():
+        if situations_fingerprint(situations) == situations_fingerprint(existing):
+            return None
+
     return write_situations_json(situations, output, source=source)

@@ -36,6 +36,7 @@ data class TrafficSituation(
 enum class SituationType(val wireCode: String, val defaultTitle: String) {
     ROADWORK(wireCode = "roadwork", defaultTitle = "Veiarbeid"),
     CLOSURE(wireCode = "closure", defaultTitle = "Stengt veg"),
+    ACCIDENT(wireCode = "accident", defaultTitle = "Trafikkulykke"),
     ;
 
     companion object {

@@ -27,13 +27,13 @@ object SignAssetId {
 
     fun candidates(kind: AlertKind, payload: String, nvdbId: Long): List<String> {
         val kindStems = stemsForKind(kind, payload, nvdbId)
-        val payloadStems = if (kind == AlertKind.SPEED_LIMIT) {
-            emptyList()
-        } else {
-            stemsFromPayload(payload)
+        val payloadStems = when (kind) {
+            // Live DATEX payloads are `type|title`, not skilt numbers / wildlife names.
+            AlertKind.SPEED_LIMIT, AlertKind.ROADWORK, AlertKind.ACCIDENT -> emptyList()
+            else -> stemsFromPayload(payload)
         }
         val ordered = when (kind) {
-            AlertKind.HAZARD, AlertKind.WILDLIFE, AlertKind.RAILWAY, AlertKind.ROADWORK ->
+            AlertKind.HAZARD, AlertKind.WILDLIFE, AlertKind.RAILWAY, AlertKind.ROADWORK, AlertKind.ACCIDENT ->
                 payloadStems + kindStems
             else -> kindStems + payloadStems
         }
@@ -91,6 +91,7 @@ object SignAssetId {
             AlertKind.TOLL -> listOf("792_30", "765_0")
             AlertKind.HAZARD -> listOf("156_0")
             AlertKind.ROADWORK -> listOf("110_0")
+            AlertKind.ACCIDENT -> listOf("153_0", "trafikkulykke")
             AlertKind.PRIORITY_ROAD -> listOf("206_0")
             AlertKind.MUNICIPALITY -> emptyList()
         }
@@ -116,6 +117,18 @@ object SignAssetId {
     private fun wildlifeStem(payload: String): String? {
         val key = payload.trim().lowercase()
         wildlifeByName[key]?.let { return it }
-        return wildlifeByName.entries.firstOrNull { key.contains(it.key) }?.value
+        // Prefer longer names so "ku" does not match inside unrelated words like "trafikkulykke".
+        return wildlifeByName.entries
+            .sortedByDescending { entry -> entry.key.length }
+            .firstOrNull { entry ->
+                val token = entry.key
+                if (token.length <= 2) {
+                    Regex("""(^|[^a-zæøå])${Regex.escape(token)}([^a-zæøå]|$)""")
+                        .containsMatchIn(key)
+                } else {
+                    key.contains(token)
+                }
+            }
+            ?.value
     }
 }

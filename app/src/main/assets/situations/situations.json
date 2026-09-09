@@ -1,5 +1,5 @@
 {
-  "version": "20260907T154853Z",
+  "version": "20260909T120000Z",
   "source": "fixture:datex_situation_sample.xml",
   "situations": [
     {
@@ -27,6 +27,18 @@
         [
           59.9299,
           10.7207
+        ]
+      ]
+    },
+    {
+      "id": "NPRA_FIXTURE_ACCIDENT_1",
+      "type": "accident",
+      "title": "Trafikkulykke Ring 3 (fixture)",
+      "description": "",
+      "points": [
+        [
+          59.9312,
+          10.7215
         ]
       ]
     }

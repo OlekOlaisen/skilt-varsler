@@ -8,7 +8,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
 import no.skiltvarsler.settings.SettingsStore
-import no.skiltvarsler.situations.SituationsHolder
+import no.skiltvarsler.situations.SituationsDownloader
 import no.skiltvarsler.tilesource.AndroidTileLoader
 import no.skiltvarsler.tilesource.GraphHolder
 import no.skiltvarsler.tilesource.KartStatus
@@ -67,7 +67,7 @@ class TilePrefetchWorker(
                 }
             }
             downloaded += download(aheadTiles, cacheDir, base, localVersions)
-            refreshSituations(base)
+            SituationsDownloader.downloadAndLoad(applicationContext, base)
             LastAlertStore.setTileStatus(statusText(allTiles, files, downloaded, latitude, longitude))
             Result.success()
         } catch (error: OutOfMemoryError) {
@@ -216,46 +216,6 @@ class TilePrefetchWorker(
             return connection
         }
         error("For mange redirects for $url")
-    }
-
-    private fun refreshSituations(base: String) {
-        val cacheDir = File(applicationContext.filesDir, "situations").apply { mkdirs() }
-        val target = File(cacheDir, SituationsHolder.FILE_NAME)
-        try {
-            downloadAtomicallyJson(target, "$base/${SituationsHolder.FILE_NAME}")
-            if (SituationsHolder.loadFile(target)) {
-                return
-            }
-        } catch (_: Exception) {
-            // Keep previously cached or bundled situations when the release has no file yet.
-        }
-        if (SituationsHolder.all().isEmpty()) {
-            SituationsHolder.loadFile(target)
-        }
-    }
-
-    private fun downloadAtomicallyJson(target: File, url: String) {
-        val tmp = File(target.parentFile, "${target.name}.tmp")
-        if (tmp.exists()) {
-            tmp.delete()
-        }
-        try {
-            downloadTo(tmp, url)
-            val text = tmp.readText(Charsets.UTF_8)
-            JSONObject(text)
-            if (target.exists()) {
-                target.delete()
-            }
-            if (!tmp.renameTo(target)) {
-                tmp.copyTo(target, overwrite = true)
-                tmp.delete()
-            }
-        } catch (error: Exception) {
-            if (tmp.exists()) {
-                tmp.delete()
-            }
-            throw error
-        }
     }
 
     companion object {

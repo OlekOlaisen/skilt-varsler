@@ -72,6 +72,7 @@ class AlertEngine(
             lastHorizon = emptyList()
             val alerts = ArrayList<Alert>()
             collectRoadworks(fix, alerting, speed)?.let { alerts.add(it) }
+            collectAccidents(fix, alerting, speed)?.let { alerts.add(it) }
             pruneFired()
             return alerts.sortedByDescending { it.kind.priority }.take(maxQueue)
         }
@@ -97,6 +98,7 @@ class AlertEngine(
         )?.let { alerts.add(it) }
         collectSectionAtkExit(match, alerting)?.let { alerts.add(it) }
         collectRoadworks(fix, alerting, speed)?.let { alerts.add(it) }
+        collectAccidents(fix, alerting, speed)?.let { alerts.add(it) }
 
         if (!driving) {
             updatePriorityMembership(match)
@@ -151,32 +153,59 @@ class AlertEngine(
     }
 
     private fun collectRoadworks(fix: GpsFix, alerting: Boolean, speed: Double): Alert? {
-        if (!alerting || !settings.enabled(AlertKind.ROADWORK)) {
+        return collectLiveSituation(
+            fix = fix,
+            alerting = alerting,
+            speed = speed,
+            kind = AlertKind.ROADWORK,
+            types = setOf(SituationType.ROADWORK, SituationType.CLOSURE),
+        )
+    }
+
+    private fun collectAccidents(fix: GpsFix, alerting: Boolean, speed: Double): Alert? {
+        return collectLiveSituation(
+            fix = fix,
+            alerting = alerting,
+            speed = speed,
+            kind = AlertKind.ACCIDENT,
+            types = setOf(SituationType.ACCIDENT),
+        )
+    }
+
+    private fun collectLiveSituation(
+        fix: GpsFix,
+        alerting: Boolean,
+        speed: Double,
+        kind: AlertKind,
+        types: Set<SituationType>,
+    ): Alert? {
+        if (!alerting || !settings.enabled(kind)) {
             return null
         }
-        if (situations.isEmpty()) {
+        val relevant = situations.filter { situation -> situation.type in types }
+        if (relevant.isEmpty()) {
             return null
         }
         val hit = SituationIndex.nearestAhead(
             position = fix.position,
             bearingDegrees = fix.bearingDegrees,
-            situations = situations,
-            maxMeters = AlertWindows.window(AlertKind.ROADWORK).maxMeters + 80.0,
+            situations = relevant,
+            maxMeters = AlertWindows.window(kind).maxMeters + 80.0,
         ) ?: return null
-        if (!shouldFire(AlertKind.ROADWORK, hit.metersAway, speed)) {
+        if (!shouldFire(kind, hit.metersAway, speed)) {
             return null
         }
-        val key = fireKey(AlertKind.ROADWORK, hit.situation.alertId)
+        val key = fireKey(kind, hit.situation.alertId)
         if (!fired.add(key)) {
             return null
         }
         val payload = hit.situation.payload
         return Alert(
-            kind = AlertKind.ROADWORK,
+            kind = kind,
             nvdbId = hit.situation.alertId,
             metersAhead = hit.metersAway,
-            title = AlertCopy.titleFor(AlertKind.ROADWORK, payload),
-            body = AlertCopy.bodyFor(AlertKind.ROADWORK, hit.metersAway, payload),
+            title = AlertCopy.titleFor(kind, payload),
+            body = AlertCopy.bodyFor(kind, hit.metersAway, payload),
             sequenceId = 0L,
             objectType = null,
             payload = payload,

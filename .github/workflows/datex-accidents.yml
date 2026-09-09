@@ -1,10 +1,10 @@
-name: DATEX roadworks
+name: DATEX accidents
 
 on:
   workflow_dispatch:
   schedule:
-    # Hourly — ConstructionWorks / MaintenanceWorks / lane management filters.
-    - cron: "40 * * * *"
+    # Every 20 minutes — Accident filter only (small payload).
+    - cron: "7,27,47 * * * *"
 
 permissions:
   contents: write
@@ -29,7 +29,7 @@ jobs:
           if [ -f pipeline/situations-out/situations.json ]; then
             cp pipeline/situations-out/situations.json pipeline/situations-out/previous.json
           fi
-      - name: Build roadworks slice
+      - name: Build accidents slice
         id: build
         working-directory: pipeline
         env:
@@ -45,7 +45,7 @@ jobs:
           rm -f situations-out/built.json
           if [ -n "$DATEX_USER" ] && [ -n "$DATEX_PASSWORD" ]; then
             python -m skiltvarsler_pipeline --build-situations \
-              --datex-profile roadworks \
+              --datex-profile accidents \
               "${MERGE_ARGS[@]}" \
               "${SKIP_ARGS[@]}" \
               --situations-out situations-out/built.json
@@ -53,7 +53,7 @@ jobs:
             echo "DATEX secrets mangler — bygger fixture"
             python -m skiltvarsler_pipeline --build-situations \
               --fixture tests/fixtures/datex_situation_sample.xml \
-              --datex-profile roadworks \
+              --datex-profile accidents \
               "${MERGE_ARGS[@]}" \
               --situations-out situations-out/built.json
           fi
@@ -68,7 +68,11 @@ jobs:
           import json
           from pathlib import Path
           payload = json.loads(Path("situations-out/situations.json").read_text(encoding="utf-8"))
-          print(f"situations={len(payload.get('situations') or [])} source={payload.get('source')}")
+          types = {}
+          for item in payload.get("situations") or []:
+              key = item.get("type")
+              types[key] = types.get(key, 0) + 1
+          print(f"situations={sum(types.values())} types={types} source={payload.get('source')}")
           PY
       - name: Upload to nvdb-tiles release
         if: steps.build.outputs.changed == 'true'

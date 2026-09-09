@@ -54,5 +54,30 @@
         </sit:groupOfLocations>
       </sit:situationRecord>
     </sit:situation>
+    <sit:situation id="NPRA_FIXTURE_ACCIDENT">
+      <sit:situationRecord xsi:type="sit:Accident" id="NPRA_FIXTURE_ACCIDENT_1" version="1">
+        <sit:situationRecordCreationTime>2026-09-07T10:00:00Z</sit:situationRecordCreationTime>
+        <sit:situationRecordVersionTime>2026-09-07T10:00:00Z</sit:situationRecordVersionTime>
+        <sit:probabilityOfOccurrence>certain</sit:probabilityOfOccurrence>
+        <com:generalPublicComment>
+          <com:comment>
+            <com:values>
+              <com:value lang="no">Trafikkulykke Ring 3 (fixture)</com:value>
+            </com:values>
+          </com:comment>
+        </com:generalPublicComment>
+        <sit:accidentType>accident</sit:accidentType>
+        <sit:groupOfLocations>
+          <loc:locationEnclosed>
+            <loc:pointByCoordinates>
+              <loc:pointCoordinates>
+                <loc:latitude>59.9312</loc:latitude>
+                <loc:longitude>10.7215</loc:longitude>
+              </loc:pointCoordinates>
+            </loc:pointByCoordinates>
+          </loc:locationEnclosed>
+        </sit:groupOfLocations>
+      </sit:situationRecord>
+    </sit:situation>
   </payloadPublication>
 </d2LogicalModel>

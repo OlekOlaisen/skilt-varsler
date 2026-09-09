@@ -282,6 +282,7 @@ object AlertNotifier {
         AlertKind.TOLL -> R.drawable.ic_alert_toll
         AlertKind.HAZARD -> R.drawable.ic_alert_hazard
         AlertKind.ROADWORK -> R.drawable.ic_alert_hazard
+        AlertKind.ACCIDENT -> R.drawable.ic_alert_hazard
         AlertKind.MUNICIPALITY, AlertKind.PRIORITY_ROAD -> R.drawable.ic_alert_border
     }
 }

@@ -36,11 +36,16 @@ Lenke til personvernerklæring (må være offentlig):
 - I Play Console: merk at appen støtter Android Auto og følg Auto-retningslinjer (lite distraksjon, maler).
 - Etter publisering på Play trenger brukere normalt **ikke** «ukjente kilder».
 
-## DATEX (live veiarbeid)
+## DATEX (live veiarbeid / trafikkulykker)
 
-Pipeline-jobben `DATEX situations` bygger `situations.json` med secrets `DATEX_USER` / `DATEX_PASSWORD` og laster opp til release-tag `nvdb-tiles`. Telefonen henter filen; den ringer ikke DATEX direkte.
+To GitHub Actions-jobber bygger `situations.json` med filtrerte DATEX-kall (ikke full snapshot):
 
-Driftsmeldinger fra Vegvesen: [DATEX information and news](https://www.vegvesen.no/en/about-us/about-us/open-data/datex/information-and-news/) (RSS tilgjengelig).
+- **DATEX accidents** — hvert ~20. min (`Accident`-filter)
+- **DATEX roadworks** — hver time (veiarbeid + stenging)
+
+Jobbene merger inn i eksisterende release-fil, så ulykker og veiarbeid ikke overskriver hverandre. Telefonen henter bare `situations.json` fra GitHub (under kjøring ca. hvert 15. min); den ringer ikke DATEX direkte.
+
+Secrets: `DATEX_USER` / `DATEX_PASSWORD`. Driftsmeldinger: [DATEX information and news](https://www.vegvesen.no/en/about-us/about-us/open-data/datex/information-and-news/).
 
 ## Ansvarsfraskrivelse (butikktekst)
 

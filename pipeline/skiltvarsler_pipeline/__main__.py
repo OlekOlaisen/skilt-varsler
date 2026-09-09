@@ -65,10 +65,31 @@ def main() -> None:
         default=None,
         help="Output-fil for situations.json (default: <out>/situations.json)",
     )
+    parser.add_argument(
+        "--datex-profile",
+        choices=["all", "accidents", "roadworks"],
+        default="all",
+        help="DATEX-filterprofil: accidents (ofte), roadworks (sjeldnere), all",
+    )
+    parser.add_argument(
+        "--merge-with",
+        type=Path,
+        default=None,
+        help="Eksisterende situations.json å merge inn i (bevarer andre typer)",
+    )
     args = parser.parse_args()
     if args.build_situations:
         output = args.situations_out or (args.out / "situations.json")
-        path = build_situations(output=output, fixture=args.fixture)
+        path = build_situations(
+            output=output,
+            fixture=args.fixture,
+            profile=args.datex_profile,
+            merge_with=args.merge_with,
+            skip_if_unchanged=args.skip_if_unchanged,
+        )
+        if path is None:
+            print("Ingen endringer i situations.json")
+            return
         print(f"Skrev {path}")
         return
     if args.print_grid:

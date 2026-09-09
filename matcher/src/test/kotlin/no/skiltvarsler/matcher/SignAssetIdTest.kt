@@ -79,4 +79,10 @@ class SignAssetIdTest {
         assertThat(SignAssetId.candidates(AlertKind.HAZARD, "110", 1L))
             .contains("110_0.svg")
     }
+
+    @Test
+    fun accidentUses153() {
+        assertThat(SignAssetId.candidates(AlertKind.ACCIDENT, "accident|Trafikkulykke", 1L).first())
+            .isEqualTo("153_0.svg")
+    }
 }

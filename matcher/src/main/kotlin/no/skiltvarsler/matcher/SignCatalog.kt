@@ -100,6 +100,13 @@ object SignCatalog {
             payload = "roadwork",
             categoryKey = "roadwork",
         ),
+        SignOption(
+            "accident",
+            AlertKind.ACCIDENT,
+            "Trafikkulykke (live)",
+            payload = "accident",
+            categoryKey = "accident",
+        ),
     )
 
     val groups: List<SignGroup> = listOf(
@@ -129,6 +136,7 @@ object SignCatalog {
         AlertKind.PRIORITY_ROAD -> "priorityRoad"
         AlertKind.MUNICIPALITY -> "municipality"
         AlertKind.ROADWORK -> "roadwork"
+        AlertKind.ACCIDENT -> "accident"
     }
 
     fun categoryKey(kind: AlertKind, payload: String = ""): String {
@@ -146,6 +154,7 @@ object SignCatalog {
             AlertKind.PRIORITY_ROAD -> "priorityRoad"
             AlertKind.MUNICIPALITY -> "municipality"
             AlertKind.ROADWORK -> "roadwork"
+            AlertKind.ACCIDENT -> "accident"
         }
     }
 
