@@ -17,6 +17,7 @@ class MapMatcher(
     private val headingAlignDegrees: Double = 55.0,
     private val stayOnSequenceMeters: Double = 22.0,
     private val headingTurnDegrees: Double = 40.0,
+    private val continueHeadingDegrees: Double = JunctionPolicy.CONTINUE_HEADING_DEGREES,
     private val multipathJumpMeters: Double = 45.0,
     private val recoverSamplesRequired: Int = 3,
 ) {
@@ -264,7 +265,7 @@ class MapMatcher(
         var nextLinkId = previous.linkId
 
         if (nextPos == 0.0 || nextPos == 1.0) {
-            val continued = continueUnique(previous, nextPos)
+            val continued = continueAlongHeading(previous, nextPos)
             if (continued != null) {
                 nextSequenceId = continued.sequenceId
                 nextDirection = continued.direction
@@ -287,12 +288,37 @@ class MapMatcher(
         )
     }
 
-    private fun continueUnique(previous: Match, atPos: Double): Match? {
+    /**
+     * Hop to the next sequence at a node. Prefer a unique outgoing link; at forks pick the
+     * straightest successor by heading (same idea as [HorizonScanner]), so through-junction
+     * driving is not stuck on the approach sequence forever.
+     */
+    private fun continueAlongHeading(previous: Match, atPos: Double): Match? {
         val sequence = graph.sequences[previous.sequenceId] ?: return null
         val nodeId = if (atPos >= 1.0) sequence.endNodeId else sequence.startNodeId
         val candidates = graph.linksFromNode(nodeId).filter { it.sequenceId != previous.sequenceId }
-        if (candidates.size != 1) return null
-        val next = candidates.first()
+        if (candidates.isEmpty()) {
+            return null
+        }
+        val next = if (candidates.size == 1) {
+            candidates.first()
+        } else {
+            val travelHeading = travelBearing(previous) ?: return null
+            val scored = candidates.mapNotNull { candidate ->
+                val arrivingAtStart = candidate.startNodeId == nodeId
+                val entryHeading = entryHeading(candidate, arrivingAtStart) ?: return@mapNotNull null
+                val delta = Geo.headingDeltaDegrees(travelHeading, entryHeading)
+                candidate to delta
+            }
+            if (scored.isEmpty()) {
+                return null
+            }
+            val best = scored.minBy { it.second }
+            if (best.second > continueHeadingDegrees) {
+                return null
+            }
+            best.first
+        }
         val arrivingAtStart = next.startNodeId == nodeId
         val direction = if (arrivingAtStart) TravelDirection.MED else TravelDirection.MOT
         val position = if (arrivingAtStart) next.startPos else next.endPos
@@ -304,6 +330,17 @@ class MapMatcher(
             snapped = snapPosition(next.sequenceId, position) ?: previous.snapped,
             distanceToLinkMeters = previous.distanceToLinkMeters,
         )
+    }
+
+    private fun entryHeading(link: RoadLink, arrivingAtStart: Boolean): Double? {
+        if (link.points.size < 2) {
+            return null
+        }
+        return if (arrivingAtStart) {
+            Geo.bearingDegrees(link.points.first(), link.points[1])
+        } else {
+            Geo.bearingDegrees(link.points.last(), link.points[link.points.lastIndex - 1])
+        }
     }
 
     private fun snapPosition(sequenceId: Long, position: Double): LatLon? {

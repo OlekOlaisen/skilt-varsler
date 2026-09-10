@@ -43,8 +43,12 @@ object AlertWindows {
         val byTime = speedMetersPerSecond * spec.seconds
         val target = byTime.coerceIn(spec.minMeters, spec.maxMeters)
         val slack = 50.0
-        return metersAhead in (target - slack).coerceAtLeast(0.0)..(target + slack)
+        val high = (target + slack).coerceAtMost(spec.maxMeters + slack)
+        // Allow catch-up when the sign only entered the horizon late (junction / hold lag).
+        return metersAhead in CATCH_UP_MIN_METERS..high
     }
+
+    const val CATCH_UP_MIN_METERS = 5.0
 
     fun maxLookaheadMeters(speedMetersPerSecond: Double): Double {
         return AlertKind.entries.maxOf { kind ->

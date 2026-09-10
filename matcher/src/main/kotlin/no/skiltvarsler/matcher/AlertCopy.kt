@@ -121,17 +121,36 @@ object AlertCopy {
             return "Ved skiltet"
         }
         val extra = extraBody(kind, payload)
+        val showApproachDistance = showsApproachDistance(kind) && metersAhead >= 1.0
+        val distance = if (showApproachDistance) {
+            "Om ${metersAhead.toInt()} m"
+        } else {
+            ""
+        }
+        if (distance.isNotEmpty() && extra.isNotEmpty()) {
+            return "$distance · $extra"
+        }
+        if (distance.isNotEmpty()) {
+            return distance
+        }
+        if (extra.isNotEmpty()) {
+            return extra
+        }
         if (metersAhead < 1.0) {
-            return extra.ifBlank {
-                when (kind) {
-                    AlertKind.SECTION_ATK_START -> "Gjennomsnittsfart"
-                    AlertKind.SECTION_ATK_END -> "Hold snittfarten"
-                    else -> ""
-                }
+            return when (kind) {
+                AlertKind.SECTION_ATK_START -> "Gjennomsnittsfart"
+                AlertKind.SECTION_ATK_END -> "Hold snittfarten"
+                else -> ""
             }
         }
-        val distance = "Om ${metersAhead.toInt()} m"
-        return if (extra.isBlank()) distance else "$distance · $extra"
+        return ""
+    }
+
+    /** Approach distance is noisy for most signs; only ATK-style alerts keep it. */
+    fun showsApproachDistance(kind: AlertKind): Boolean {
+        return kind == AlertKind.SPEED_CAMERA ||
+            kind == AlertKind.SECTION_ATK_START ||
+            kind == AlertKind.SECTION_ATK_END
     }
 
     fun extraBody(kind: AlertKind, payload: String): String {

@@ -2,6 +2,7 @@ package no.skiltvarsler.tracking
 
 import no.skiltvarsler.log.DebugLog
 import no.skiltvarsler.matcher.Alert
+import no.skiltvarsler.matcher.AlertCopy
 import no.skiltvarsler.matcher.AlertKind
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.atomic.AtomicBoolean
@@ -16,11 +17,16 @@ data class UpcomingSign(
     val nvdbId: Long,
 ) {
     val distanceLabel: String
-        get() = if (metersAhead >= 1000) {
-            val km = metersAhead / 1000.0
-            String.format(java.util.Locale("nb", "NO"), "%.1f km", km)
-        } else {
-            "$metersAhead m"
+        get() {
+            if (!AlertCopy.showsApproachDistance(kind)) {
+                return ""
+            }
+            return if (metersAhead >= 1000) {
+                val km = metersAhead / 1000.0
+                String.format(java.util.Locale("nb", "NO"), "%.1f km", km)
+            } else {
+                "$metersAhead m"
+            }
         }
 }
 

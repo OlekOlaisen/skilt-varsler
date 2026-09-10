@@ -11,8 +11,9 @@ import kotlin.math.abs
 
 class HorizonScanner(
     private var graph: RoadGraph,
-    private val continueHeadingDegrees: Double = 50.0,
-    private val bestContinuationMarginDegrees: Double = 12.0,
+    /** Max heading change to treat an outgoing link as the same through road. */
+    private val continueHeadingDegrees: Double = JunctionPolicy.CONTINUE_HEADING_DEGREES,
+    private val bestContinuationMarginDegrees: Double = JunctionPolicy.BEST_CONTINUATION_MARGIN_DEGREES,
     private val junctionControlMaxTurnDegrees: Double = 20.0,
 ) {
     fun updateGraph(next: RoadGraph) {

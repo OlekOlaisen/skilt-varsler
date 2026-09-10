@@ -146,13 +146,19 @@ object SyntheticGraph {
     const val SEQ_MAIN = 400L
     const val SEQ_SIDE = 401L
     const val SEQ_CONTINUE = 402L
+    const val SEQ_EAST = 410L
+    const val SEQ_CONNECTOR = 411L
+    const val SEQ_SOUTH = 412L
     const val SIDE_HAZARD_ID = 910001L
     const val CONTINUE_HAZARD_ID = 910002L
     const val SIDE_PRIORITY_ID = 910003L
     const val MAIN_PRIORITY_SIGN_ID = 910004L
     const val SIDE_PRIORITY_REMINDER_ID = 910005L
+    const val MAIN_PRIORITY_STRETCH_ID = 910008L
+    const val CONTINUE_PRIORITY_STRETCH_ID = 910009L
     const val MAIN_LENGTH_METERS = 400.0
     const val SIDE_LENGTH_METERS = 300.0
+    const val CONNECTOR_LENGTH_METERS = 40.0
 
     const val SIDE_STOP_ID = 910006L
     const val SIDE_YIELD_ID = 910007L
@@ -162,14 +168,99 @@ object SyntheticGraph {
         return junctionGraph(sideBearingDegrees = 90.0, includeJunctionControl = false)
     }
 
+    /**
+     * Eastbound signed 40 → short unsigned connector (roundabout-like) → southbound signed 40.
+     * Models the Østmarkveien → roundabout → General Ruges vei speed gap.
+     */
+    fun eastRoadViaUnsignedConnectorToSouth(): RoadGraph {
+        val eastEnd = Geo.offsetMeters(origin, northMeters = 0.0, eastMeters = MAIN_LENGTH_METERS)
+        val southStart = Geo.offsetMeters(eastEnd, northMeters = -CONNECTOR_LENGTH_METERS, eastMeters = CONNECTOR_LENGTH_METERS)
+        val southEnd = Geo.offsetMeters(southStart, northMeters = -MAIN_LENGTH_METERS, eastMeters = 0.0)
+        val builder = RoadGraphBuilder().apply {
+            tileId = "fixture-unsigned-connector"
+            version = "test"
+        }
+        builder.addNode(RoadNode(1, origin))
+        builder.addNode(RoadNode(2, eastEnd))
+        builder.addNode(RoadNode(3, southStart))
+        builder.addNode(RoadNode(4, southEnd))
+        builder.addLink(
+            RoadLink(
+                id = 50,
+                sequenceId = SEQ_EAST,
+                linkNumber = 1,
+                startNodeId = 1,
+                endNodeId = 2,
+                startPos = 0.0,
+                endPos = 1.0,
+                lengthMeters = MAIN_LENGTH_METERS,
+                typeVeg = "Enkel bilveg",
+                matchable = true,
+                points = dense(origin, eastEnd),
+            ),
+        )
+        builder.addLink(
+            RoadLink(
+                id = 51,
+                sequenceId = SEQ_CONNECTOR,
+                linkNumber = 1,
+                startNodeId = 2,
+                endNodeId = 3,
+                startPos = 0.0,
+                endPos = 1.0,
+                lengthMeters = CONNECTOR_LENGTH_METERS,
+                typeVeg = "Rundkjøring",
+                matchable = true,
+                points = dense(eastEnd, southStart),
+            ),
+        )
+        builder.addLink(
+            RoadLink(
+                id = 52,
+                sequenceId = SEQ_SOUTH,
+                linkNumber = 1,
+                startNodeId = 3,
+                endNodeId = 4,
+                startPos = 0.0,
+                endPos = 1.0,
+                lengthMeters = MAIN_LENGTH_METERS,
+                typeVeg = "Enkel bilveg",
+                matchable = true,
+                points = dense(southStart, southEnd),
+            ),
+        )
+        builder.setSequenceLength(SEQ_EAST, MAIN_LENGTH_METERS)
+        builder.setSequenceLength(SEQ_CONNECTOR, CONNECTOR_LENGTH_METERS)
+        builder.setSequenceLength(SEQ_SOUTH, MAIN_LENGTH_METERS)
+        builder.addSpeed(SpeedInterval(SEQ_EAST, 0.0, 1.0, 40, TravelDirection.MED))
+        builder.addSpeed(SpeedInterval(SEQ_SOUTH, 0.0, 1.0, 40, TravelDirection.MED))
+        return builder.build()
+    }
+
     /** Through road north with a side street leaving at [sideBearingDegrees] from north. */
     fun mainRoadWithAngledSideStreet(sideBearingDegrees: Double = ANGLED_SIDE_DEGREES): RoadGraph {
         return junctionGraph(sideBearingDegrees = sideBearingDegrees, includeJunctionControl = true)
     }
 
+    /**
+     * Priority stretch on MAIN and SIDE (and optionally CONTINUE) for turn vs straight re-alert tests.
+     */
+    fun priorityRoadWithSideAndContinueStretches(continueHasPriority: Boolean): RoadGraph {
+        return junctionGraph(
+            sideBearingDegrees = 90.0,
+            includeJunctionControl = false,
+            mainPriorityStretch = true,
+            continuePriorityPlate = false,
+            continuePriorityStretch = continueHasPriority,
+        )
+    }
+
     private fun junctionGraph(
         sideBearingDegrees: Double,
         includeJunctionControl: Boolean,
+        mainPriorityStretch: Boolean = false,
+        continuePriorityPlate: Boolean = true,
+        continuePriorityStretch: Boolean = false,
     ): RoadGraph {
         val junction = Geo.offsetMeters(origin, northMeters = MAIN_LENGTH_METERS, eastMeters = 0.0)
         val northEnd = Geo.offsetMeters(junction, northMeters = MAIN_LENGTH_METERS, eastMeters = 0.0)
@@ -252,17 +343,45 @@ object SyntheticGraph {
                 payload = "108",
             ),
         )
-        builder.addObject(
-            RoadObject(
-                nvdbId = MAIN_PRIORITY_SIGN_ID,
-                type = RoadObjectType.PRIORITY_ROAD,
-                sequenceId = SEQ_CONTINUE,
-                fromPos = 50.0 / MAIN_LENGTH_METERS,
-                toPos = 50.0 / MAIN_LENGTH_METERS,
-                direction = TravelDirection.MED,
-                payload = "206",
-            ),
-        )
+        if (continuePriorityPlate) {
+            builder.addObject(
+                RoadObject(
+                    nvdbId = MAIN_PRIORITY_SIGN_ID,
+                    type = RoadObjectType.PRIORITY_ROAD,
+                    sequenceId = SEQ_CONTINUE,
+                    fromPos = 50.0 / MAIN_LENGTH_METERS,
+                    toPos = 50.0 / MAIN_LENGTH_METERS,
+                    direction = TravelDirection.MED,
+                    payload = "206",
+                ),
+            )
+        }
+        if (mainPriorityStretch) {
+            builder.addObject(
+                RoadObject(
+                    nvdbId = MAIN_PRIORITY_STRETCH_ID,
+                    type = RoadObjectType.PRIORITY_ROAD,
+                    sequenceId = SEQ_MAIN,
+                    fromPos = 0.0,
+                    toPos = 1.0,
+                    direction = TravelDirection.MED,
+                    payload = "206",
+                ),
+            )
+        }
+        if (continuePriorityStretch) {
+            builder.addObject(
+                RoadObject(
+                    nvdbId = CONTINUE_PRIORITY_STRETCH_ID,
+                    type = RoadObjectType.PRIORITY_ROAD,
+                    sequenceId = SEQ_CONTINUE,
+                    fromPos = 0.0,
+                    toPos = 1.0,
+                    direction = TravelDirection.MED,
+                    payload = "206",
+                ),
+            )
+        }
         builder.addObject(
             RoadObject(
                 nvdbId = SIDE_PRIORITY_ID,
@@ -310,6 +429,9 @@ object SyntheticGraph {
                 ),
             )
         }
+        builder.addSpeed(SpeedInterval(SEQ_MAIN, 0.0, 1.0, 40, TravelDirection.MED))
+        builder.addSpeed(SpeedInterval(SEQ_CONTINUE, 0.0, 1.0, 40, TravelDirection.MED))
+        builder.addSpeed(SpeedInterval(SEQ_SIDE, 0.0, 1.0, 40, TravelDirection.MED))
         return builder.build()
     }
 

@@ -26,6 +26,7 @@ class SettingsStore(private val context: Context) {
             byId = byId,
             categoryFallback = categoryFallback,
             alertsMuted = prefs[Keys.alertsMuted] ?: false,
+            combineAlerts = prefs[Keys.combineAlerts] ?: true,
         )
     }
 
@@ -57,6 +58,12 @@ class SettingsStore(private val context: Context) {
         }
     }
 
+    suspend fun setCombineAlerts(enabled: Boolean) {
+        context.dataStore.edit { prefs ->
+            prefs[Keys.combineAlerts] = enabled
+        }
+    }
+
     suspend fun setAutoStartTracking(enabled: Boolean) {
         context.dataStore.edit { prefs ->
             prefs[Keys.autoStartTracking] = enabled
@@ -65,6 +72,7 @@ class SettingsStore(private val context: Context) {
 
     private object Keys {
         val alertsMuted = booleanPreferencesKey("alertsMuted")
+        val combineAlerts = booleanPreferencesKey("combineAlerts")
         val autoStartTracking = booleanPreferencesKey("autoStartTracking")
     }
 

@@ -178,6 +178,10 @@ fun SkiltAppScreen(
                     onAlertsMutedChange = { muted ->
                         scope.launch { store.setAlertsMuted(muted) }
                     },
+                    combineAlerts = settings.combineAlerts,
+                    onCombineAlertsChange = { enabled ->
+                        scope.launch { store.setCombineAlerts(enabled) }
+                    },
                     autoStartTracking = autoStartTracking,
                     onAutoStartTrackingChange = { enabled ->
                         scope.launch { store.setAutoStartTracking(enabled) }

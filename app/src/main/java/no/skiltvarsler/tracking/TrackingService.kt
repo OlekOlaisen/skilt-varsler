@@ -14,13 +14,17 @@ import com.google.android.gms.location.LocationServices
 import com.google.android.gms.location.Priority
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 import no.skiltvarsler.log.DebugLog
+import no.skiltvarsler.matcher.Alert
+import no.skiltvarsler.matcher.AlertCombine
 import no.skiltvarsler.matcher.AlertCopy
 import no.skiltvarsler.matcher.AlertEngine
 import no.skiltvarsler.matcher.AlertSettings
@@ -51,6 +55,8 @@ class TrackingService : Service() {
     private var lastPrefetchEnqueuedMs: Long = 0L
     private var cachedManifest: List<ManifestTile> = emptyList()
     private var cachedManifestModified: Long = -1L
+    private val pendingCombinedAlerts = ArrayList<Alert>()
+    private var combineFlushJob: Job? = null
     private val callback = object : LocationCallback() {
         override fun onLocationResult(result: LocationResult) {
             val location = result.lastLocation ?: return
@@ -199,7 +205,40 @@ class TrackingService : Service() {
             if (LastAlertStore.alertsMuted) {
                 return@withContext
             }
-            alerts.forEach { AlertNotifier.publishAlert(this@TrackingService, it) }
+            publishOutgoingAlerts(alerts)
+        }
+    }
+
+    private fun publishOutgoingAlerts(alerts: List<Alert>) {
+        if (alerts.isEmpty()) {
+            return
+        }
+        val combineEnabled = alertSettings?.combineAlerts != false
+        if (!combineEnabled) {
+            alerts.forEach { alert ->
+                AlertNotifier.publishAlert(this@TrackingService, alert)
+            }
+            return
+        }
+        pendingCombinedAlerts.addAll(alerts)
+        combineFlushJob?.cancel()
+        combineFlushJob = scope.launch {
+            delay(AlertCombine.COALESCE_WINDOW_MS)
+            flushCombinedAlerts()
+        }
+    }
+
+    private suspend fun flushCombinedAlerts() {
+        if (pendingCombinedAlerts.isEmpty()) {
+            return
+        }
+        val batch = ArrayList(pendingCombinedAlerts)
+        pendingCombinedAlerts.clear()
+        withContext(Dispatchers.Main.immediate) {
+            if (LastAlertStore.alertsMuted) {
+                return@withContext
+            }
+            AlertNotifier.publishCombined(this@TrackingService, batch)
         }
     }
 
@@ -340,6 +379,12 @@ class TrackingService : Service() {
 
     override fun onDestroy() {
         fused.removeLocationUpdates(callback)
+        combineFlushJob?.cancel()
+        if (pendingCombinedAlerts.isNotEmpty() && !LastAlertStore.alertsMuted) {
+            val batch = ArrayList(pendingCombinedAlerts)
+            pendingCombinedAlerts.clear()
+            AlertNotifier.publishCombined(this, batch)
+        }
         scope.cancel()
         val summary = TripRecorder.finish()
         LastAlertStore.setTrackingActive(false)

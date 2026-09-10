@@ -47,7 +47,7 @@ object TestAlerts {
             when (sign.kind) {
                 AlertKind.SPEED_LIMIT -> "${sign.payload} km/t"
                 AlertKind.MUNICIPALITY -> "Kommunegrense"
-                else -> "Om ${metersAhead.toInt()} m"
+                else -> ""
             }
         }
         return Alert(

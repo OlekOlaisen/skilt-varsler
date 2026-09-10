@@ -126,41 +126,46 @@ class ReplayTest {
     }
 
     @Test
-    fun speedLimitFiresAheadOfTheZoneChange() {
+    fun speedLimitFiresWhenEnteringTheZoneNotAhead() {
         val graph = SyntheticGraph.e6VestbyLike()
-        val result = Replay.play(
-            AlertEngine(graph),
-            Replay.alongLink(
-                graph.sequences.getValue(SyntheticGraph.SEQ_E6_NORTH).links.first(),
-                TravelDirection.MED,
-                speedMetersPerSecond = 25.0,
-            ),
+        val northLinks = graph.sequences.getValue(SyntheticGraph.SEQ_E6_NORTH).links.sortedBy { it.startPos }
+        val firstHalf = Replay.alongLink(northLinks[0], TravelDirection.MED, speedMetersPerSecond = 25.0)
+        val secondHalf = Replay.alongLink(
+            northLinks[1],
+            TravelDirection.MED,
+            speedMetersPerSecond = 25.0,
+            startTimeMs = firstHalf.size * 1000L,
         )
+        val result = Replay.play(AlertEngine(graph), firstHalf + secondHalf)
         val limits = result.alertsOf(AlertKind.SPEED_LIMIT)
         assertThat(limits).hasSize(1)
         assertThat(limits.single().payload).isEqualTo("60")
-        assertThat(limits.single().metersAhead).isAtLeast(50.0)
-        assertThat(limits.single().metersAhead).isAtMost(170.0)
+        assertThat(limits.single().metersAhead).isEqualTo(0.0)
         val (fix, _) = result.alerts.first { it.second.kind == AlertKind.SPEED_LIMIT }
         val matchAtAlert = result.matches[(fix.timeMs / 1000L).toInt()]
-        assertThat(matchAtAlert.position).isLessThan(0.5)
+        assertThat(matchAtAlert.position).isAtLeast(0.5)
         assertThat(graph.speedAt(matchAtAlert.sequenceId, matchAtAlert.position, matchAtAlert.direction))
-            .isEqualTo(80)
-        assertThat(graph.speedAt(SyntheticGraph.SEQ_E6_NORTH, 0.5, TravelDirection.MED)).isEqualTo(60)
+            .isEqualTo(60)
+        assertThat(result.alertsOf(AlertKind.SPEED_LIMIT).none { it.metersAhead > 0.0 }).isTrue()
     }
 
     @Test
-    fun prioritySignFiresAheadOnTheRoadYouStayOn() {
+    fun priorityPlateAlertsNearTheSignNotFarAhead() {
         val graph = SyntheticGraph.mainRoadWithSideStreet()
+        val main = graph.sequences.getValue(SyntheticGraph.SEQ_MAIN).links.first()
         val continueLink = graph.sequences.getValue(SyntheticGraph.SEQ_CONTINUE).links.first()
-        val result = Replay.play(
-            AlertEngine(graph),
-            Replay.alongLink(continueLink, TravelDirection.MED, speedMetersPerSecond = 15.0),
+        val alongMain = Replay.alongLink(main, TravelDirection.MED, speedMetersPerSecond = 15.0)
+        val alongContinue = Replay.alongLink(
+            continueLink,
+            TravelDirection.MED,
+            speedMetersPerSecond = 15.0,
+            startTimeMs = alongMain.last().timeMs + 1_000L,
         )
+        val result = Replay.play(AlertEngine(graph), alongMain + alongContinue)
         val priority = result.alertsOf(AlertKind.PRIORITY_ROAD)
         assertThat(priority).hasSize(1)
         assertThat(priority.single().nvdbId).isEqualTo(SyntheticGraph.MAIN_PRIORITY_SIGN_ID)
-        assertThat(priority.single().metersAhead).isGreaterThan(0.0)
+        assertThat(priority.single().metersAhead).isAtMost(AlertEngine.PRIORITY_AT_PLATE_METERS)
     }
 
     @Test

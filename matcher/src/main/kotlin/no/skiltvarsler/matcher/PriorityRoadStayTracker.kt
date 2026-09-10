@@ -1,9 +1,9 @@
 package no.skiltvarsler.matcher
 
 /**
- * One forkjørsveg alert per stay: the 206 at the entrance, or stretch
- * enter if joining from a side road. Reminder plates stay silent until
- * the stretch has been left for [graceAfterLeaveMs].
+ * One forkjørsveg alert per stay: when entering the stretch, or when reaching the 206 plate
+ * (not foreshadowed tens of metres ahead). Reminder plates stay silent until the stretch has
+ * been left for [graceAfterLeaveMs], or the driver turns onto a different priority road.
  *
  * NVDB 596 geometry often has gaps between reminder plates.
  */
@@ -46,6 +46,15 @@ class PriorityRoadStayTracker(
     fun markAlerted() {
         stayActive = true
         alertedThisStay = true
+    }
+
+    /**
+     * Turning onto another priority-road arm starts a fresh alert opportunity without
+     * waiting for [graceAfterLeaveMs] (straight sequence splits must not call this).
+     */
+    fun allowAlertAfterTurn() {
+        stayActive = true
+        alertedThisStay = false
     }
 
     fun reset() {

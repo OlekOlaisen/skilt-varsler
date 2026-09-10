@@ -9,9 +9,9 @@ class AlertCopyTest {
         assertThat(AlertCopy.titleFor(AlertKind.TOLL, "792|Sørkedalsveien|42"))
             .isEqualTo("Sørkedalsveien")
         assertThat(AlertCopy.bodyFor(AlertKind.TOLL, 180.0, "792|Sørkedalsveien|42"))
-            .isEqualTo("Om 180 m · 33,60 kr")
+            .isEqualTo("33,60 kr")
         assertThat(AlertCopy.titleFor(AlertKind.TOLL, "TOLL")).isEqualTo("Bomstasjon")
-        assertThat(AlertCopy.bodyFor(AlertKind.TOLL, 120.0, "TOLL")).isEqualTo("Om 120 m")
+        assertThat(AlertCopy.bodyFor(AlertKind.TOLL, 120.0, "TOLL")).isEqualTo("")
     }
 
     @Test
@@ -19,13 +19,24 @@ class AlertCopyTest {
         assertThat(AlertCopy.titleFor(AlertKind.HAZARD, "122|Lærdalstunnelen|24500"))
             .isEqualTo("Lærdalstunnelen")
         assertThat(AlertCopy.bodyFor(AlertKind.HAZARD, 200.0, "122|Lærdalstunnelen|24500"))
-            .isEqualTo("Om 200 m · 24,5 km")
+            .isEqualTo("24,5 km")
         assertThat(AlertCopy.titleFor(AlertKind.HAZARD, "106.1")).isEqualTo("Smalere veg")
-        assertThat(AlertCopy.bodyFor(AlertKind.HAZARD, 150.0, "106.1")).isEqualTo("Om 150 m")
+        assertThat(AlertCopy.bodyFor(AlertKind.HAZARD, 150.0, "106.1")).isEqualTo("")
         assertThat(AlertCopy.titleFor(AlertKind.HAZARD, "106.1 - Smalere veg"))
             .isEqualTo("Smalere veg")
         assertThat(ObjectPayload.parse("106.1 - Smalere veg").code).isEqualTo("106.1")
         assertThat(ObjectPayload.parse("106.1 - Smalere veg").title).isEqualTo("Smalere veg")
+    }
+
+    @Test
+    fun onlyAtkAlertsIncludeApproachDistance() {
+        assertThat(AlertCopy.bodyFor(AlertKind.SPEED_CAMERA, 220.0)).isEqualTo("Om 220 m")
+        assertThat(AlertCopy.bodyFor(AlertKind.SECTION_ATK_START, 300.0)).isEqualTo("Om 300 m")
+        assertThat(AlertCopy.bodyFor(AlertKind.SECTION_ATK_END, 90.0)).isEqualTo("Om 90 m")
+        assertThat(AlertCopy.bodyFor(AlertKind.YIELD, 40.0)).isEqualTo("Ved skiltet")
+        assertThat(AlertCopy.bodyFor(AlertKind.PRIORITY_ROAD, 15.0, "206")).isEqualTo("")
+        assertThat(AlertCopy.showsApproachDistance(AlertKind.SPEED_CAMERA)).isTrue()
+        assertThat(AlertCopy.showsApproachDistance(AlertKind.HAZARD)).isFalse()
     }
 
     @Test

@@ -24,6 +24,7 @@ import no.skiltvarsler.log.DebugLog
 import no.skiltvarsler.car.CarMessageActionService
 import no.skiltvarsler.car.SkiltCarAppService
 import no.skiltvarsler.matcher.Alert
+import no.skiltvarsler.matcher.AlertCombine
 import no.skiltvarsler.matcher.AlertKind
 import no.skiltvarsler.signs.SignRenderer
 
@@ -83,12 +84,40 @@ object AlertNotifier {
     }
 
     fun publishAlert(context: Context, alert: Alert) {
-        LastAlertStore.update(alert)
-        DebugLog.appendAlert(alert)
-        val icon = iconRes(alert.kind)
-        val titleText = alert.title
-        val subtitleText = alert.body
-        val sign = SignRenderer.bitmap(context, alert, 192)
+        publishAlertContent(
+            context = context,
+            displayAlert = alert,
+            logAlerts = listOf(alert),
+        )
+    }
+
+    /**
+     * Publishes one heads-up for one or more near-simultaneous alerts.
+     * Multiple alerts become a single title like "Fartsgrense 40 · Forkjørsveg".
+     */
+    fun publishCombined(context: Context, alerts: List<Alert>) {
+        if (alerts.isEmpty()) {
+            return
+        }
+        val merged = AlertCombine.merge(alerts)
+        publishAlertContent(
+            context = context,
+            displayAlert = merged,
+            logAlerts = AlertCombine.dedupeAndSort(alerts),
+        )
+    }
+
+    private fun publishAlertContent(
+        context: Context,
+        displayAlert: Alert,
+        logAlerts: List<Alert>,
+    ) {
+        LastAlertStore.update(displayAlert)
+        logAlerts.forEach { alert -> DebugLog.appendAlert(alert) }
+        val icon = iconRes(displayAlert.kind)
+        val titleText = displayAlert.title
+        val subtitleText = displayAlert.body
+        val sign = SignRenderer.bitmap(context, displayAlert, 192)
         val builder = NotificationCompat.Builder(context, CHANNEL_ALERT)
             .setSmallIcon(icon)
             .setContentTitle(titleText)

@@ -1,5 +1,6 @@
 package no.skiltvarsler.matcher
 
+import no.skiltvarsler.tiles.Geo
 import no.skiltvarsler.tiles.RoadGraph
 import no.skiltvarsler.tiles.RoadObject
 import no.skiltvarsler.tiles.RoadObjectType
@@ -16,10 +17,14 @@ class AlertEngine(
     private val fired = LinkedHashSet<String>()
     private val priorityStay = PriorityRoadStayTracker()
     private var lastSpeedKmh: Int? = null
+    private var lastSpeedSequenceId: Long? = null
+    private var lastSpeedDirection: TravelDirection? = null
     private var lastKommune: Int? = null
     private var lastInsideWildlife = HashSet<Long>()
     private var lastInsideSectionAtk = HashSet<Long>()
     private var lastInsidePriority = HashSet<Long>()
+    private var lastMatchSequenceId: Long? = null
+    private var lastMatchDirection: TravelDirection? = null
     private var lastHorizon: List<HorizonCandidate> = emptyList()
     private var situations: List<TrafficSituation> = emptyList()
 
@@ -46,10 +51,14 @@ class AlertEngine(
         fired.clear()
         priorityStay.reset()
         lastSpeedKmh = null
+        lastSpeedSequenceId = null
+        lastSpeedDirection = null
         lastKommune = null
         lastInsideWildlife.clear()
         lastInsideSectionAtk.clear()
         lastInsidePriority.clear()
+        lastMatchSequenceId = null
+        lastMatchDirection = null
         lastHorizon = emptyList()
     }
 
@@ -80,7 +89,7 @@ class AlertEngine(
         refreshPriorityStay(match, speed, fix.timeMs)
         val alerts = ArrayList<Alert>()
 
-        collectSpeedLimit(match, alerting, speed)?.let { alerts.add(it) }
+        collectSpeedLimit(match, alerting)?.let { alerts.add(it) }
         collectKommune(match, alerting)?.let { alerts.add(it) }
         collectIntervalEntries(
             match,
@@ -102,45 +111,37 @@ class AlertEngine(
 
         if (!driving) {
             updatePriorityMembership(match)
+            rememberMatch(match)
             pruneFired()
             return alerts
         }
 
-        val prioritySignReady = lastHorizon.any { candidate ->
-            candidate.obj.type == RoadObjectType.PRIORITY_ROAD &&
-                candidate.obj.isPoint &&
-                !AlertCopy.isPriorityEnd(candidate.obj.payload) &&
-                shouldFire(AlertKind.PRIORITY_ROAD, candidate.metersAhead, speed)
-        }
-        if (!prioritySignReady) {
-            collectPriorityEnter(match, alerting)?.let { alerts.add(it) }
-        } else {
-            updatePriorityMembership(match)
-        }
+        // Forkjørsveg: alert on stretch enter / at the plate — never as a long-range ahead warning.
+        // A clear turn onto another priority arm allows a fresh alert (example 2); straight
+        // sequence splits along the same road do not (example 1).
+        maybeAllowPriorityAlertAfterTurn(match)
+        collectPriorityEnter(match, alerting)?.let { alerts.add(it) }
+        collectPriorityAtPlate(match, alerting)?.let { alerts.add(it) }
 
         for (candidate in lastHorizon) {
             val kind = candidate.obj.type.toAlertKind() ?: continue
             if (kind == AlertKind.WILDLIFE || kind == AlertKind.SECTION_ATK_START) continue
-            if (!settings.enabled(kind, candidate.obj.payload)) continue
-            if (!shouldFire(kind, candidate.metersAhead, speed)) continue
-            if (kind == AlertKind.PRIORITY_ROAD &&
-                !AlertCopy.isPriorityEnd(candidate.obj.payload) &&
-                !priorityStay.allowAlert()
-            ) {
+            // Entrance/reminder 206 plates are handled by collectPriority*; only 208 ends stay on horizon.
+            if (kind == AlertKind.PRIORITY_ROAD && !AlertCopy.isPriorityEnd(candidate.obj.payload)) {
                 continue
             }
+            if (!settings.enabled(kind, candidate.obj.payload)) continue
+            val metersAhead = correctedMetersAhead(match, fix, candidate.metersAhead)
+            if (!shouldFire(kind, metersAhead, speed)) continue
             val key = fireKey(kind, candidate.obj.nvdbId)
             if (!fired.add(key)) continue
-            if (kind == AlertKind.PRIORITY_ROAD && !AlertCopy.isPriorityEnd(candidate.obj.payload)) {
-                priorityStay.markAlerted()
-            }
             alerts.add(
                 Alert(
                     kind = kind,
                     nvdbId = candidate.obj.nvdbId,
-                    metersAhead = candidate.metersAhead,
+                    metersAhead = metersAhead,
                     title = AlertCopy.titleFor(kind, candidate.obj.payload),
-                    body = AlertCopy.bodyFor(kind, candidate.metersAhead, candidate.obj.payload),
+                    body = AlertCopy.bodyFor(kind, metersAhead, candidate.obj.payload),
                     sequenceId = candidate.obj.sequenceId,
                     objectType = candidate.obj.type,
                     payload = candidate.obj.payload,
@@ -148,6 +149,7 @@ class AlertEngine(
             )
         }
 
+        rememberMatch(match)
         pruneFired()
         return alerts.sortedByDescending { it.kind.priority }.take(maxQueue)
     }
@@ -225,18 +227,34 @@ class AlertEngine(
         val onPriorityRoad = priorityStretchesOn(match).any { obj ->
             insideInterval(match.position, obj)
         }
-        val signInWindow = lastHorizon.any { candidate ->
-            candidate.obj.type == RoadObjectType.PRIORITY_ROAD &&
-                candidate.obj.isPoint &&
-                !AlertCopy.isPriorityEnd(candidate.obj.payload) &&
-                shouldFire(AlertKind.PRIORITY_ROAD, candidate.metersAhead, speed)
-        }
+        val nearEntrancePlate = isNearPriorityEntrancePlate(match)
         val endSignInWindow = lastHorizon.any { candidate ->
             candidate.obj.type == RoadObjectType.PRIORITY_ROAD &&
                 AlertCopy.isPriorityEnd(candidate.obj.payload) &&
                 shouldFire(AlertKind.PRIORITY_ROAD, candidate.metersAhead, speed)
         }
-        priorityStay.onTick(onPriorityRoad, signInWindow, endSignInWindow, nowMs)
+        priorityStay.onTick(onPriorityRoad, nearEntrancePlate, endSignInWindow, nowMs)
+    }
+
+    private fun isNearPriorityEntrancePlate(match: Match): Boolean {
+        val sequence = graph.sequences[match.sequenceId] ?: return false
+        if (sequence.lengthMeters <= 0.0) {
+            return false
+        }
+        return graph.objectsOn(match.sequenceId).any { obj ->
+            if (obj.type != RoadObjectType.PRIORITY_ROAD || !obj.isPoint) {
+                return@any false
+            }
+            if (AlertCopy.isPriorityEnd(obj.payload) || !obj.direction.matches(match.direction)) {
+                return@any false
+            }
+            val signedMeters = if (match.direction == TravelDirection.MED) {
+                (obj.fromPos - match.position) * sequence.lengthMeters
+            } else {
+                (match.position - obj.fromPos) * sequence.lengthMeters
+            }
+            signedMeters <= PRIORITY_AT_PLATE_METERS && signedMeters >= -5.0
+        }
     }
 
     private fun shouldFire(kind: AlertKind, metersAhead: Double, speed: Double): Boolean {
@@ -244,6 +262,27 @@ class AlertEngine(
             return metersAhead in 50.0..400.0
         }
         return AlertWindows.inWindow(kind, metersAhead, speed)
+    }
+
+    /**
+     * When the matcher is holding (bridge/tunnel multipath), GPS often advances past the
+     * snapped match. Horizon distance is measured from the lagging snap — shorten it so
+     * we do not announce "Om 120 m" when the car is already at the plate.
+     */
+    private fun correctedMetersAhead(match: Match, fix: GpsFix, metersAhead: Double): Double {
+        if (!matcher.isHolding()) {
+            return metersAhead
+        }
+        val travel = travelBearing(match.sequenceId, match.position, match.direction) ?: return metersAhead
+        val toGpsBearing = Geo.bearingDegrees(match.snapped, fix.position)
+        if (Geo.headingDeltaDegrees(travel, toGpsBearing) > 70.0) {
+            return metersAhead
+        }
+        val lagMeters = Geo.distanceMeters(match.snapped, fix.position)
+        if (lagMeters < 15.0) {
+            return metersAhead
+        }
+        return (metersAhead - lagMeters).coerceAtLeast(0.0)
     }
 
     private fun collectKommune(match: Match, driving: Boolean): Alert? {
@@ -268,25 +307,33 @@ class AlertEngine(
         )
     }
 
-    private fun collectSpeedLimit(match: Match, driving: Boolean, speed: Double): Alert? {
+    /**
+     * Speed limits alert only when the matched limit changes (enter), or when turning onto
+     * another road that still has the same number. Never foreshadow an upcoming zone.
+     *
+     * Links without NVDB speed (typical roundabout connectors) must not clear [lastSpeedKmh]:
+     * otherwise exiting onto a signed road with the same number never re-alerts.
+     */
+    private fun collectSpeedLimit(match: Match, driving: Boolean): Alert? {
         val currentKmh = graph.speedAt(match.sequenceId, match.position, match.direction)
-        val previousKmh = lastSpeedKmh
-        lastSpeedKmh = currentKmh
-        if (!driving) return null
-        val lookMeters = AlertWindows.window(AlertKind.SPEED_LIMIT).maxMeters + 50.0
-        val upcoming = graph.upcomingSpeedChange(
-            match.sequenceId,
-            match.position,
-            match.direction,
-            lookMeters,
-        )
-        if (upcoming != null &&
-            upcoming.kmh != currentKmh &&
-            shouldFire(AlertKind.SPEED_LIMIT, upcoming.metersAhead, speed)
-        ) {
-            return speedAlert(match, upcoming.kmh, upcoming.metersAhead, upcoming.atPos)
+        if (currentKmh == null) {
+            return null
         }
-        if (previousKmh != null && currentKmh != null && previousKmh != currentKmh) {
+        val previousKmh = lastSpeedKmh
+        val previousSequenceId = lastSpeedSequenceId
+        val previousDirection = lastSpeedDirection
+        lastSpeedKmh = currentKmh
+        lastSpeedSequenceId = match.sequenceId
+        lastSpeedDirection = match.direction
+        if (!driving) return null
+        if (previousKmh != null && previousKmh != currentKmh) {
+            return speedAlert(match, currentKmh, 0.0, match.position)
+        }
+        // Turning onto a different road: confirm the limit even when the number is unchanged.
+        if (previousSequenceId != null &&
+            previousDirection != null &&
+            isTurnOntoNewRoad(previousSequenceId, previousDirection, match)
+        ) {
             return speedAlert(match, currentKmh, 0.0, match.position)
         }
         return null
@@ -336,6 +383,132 @@ class AlertEngine(
         lastInsidePriority.clear()
         lastInsidePriority.addAll(inside)
         return entered
+    }
+
+    /**
+     * Point 206 plates alert only when you are at/just before the plate (entering),
+     * not tens of metres ahead. Uses match geometry directly — horizon skips sub-metre hits.
+     */
+    private fun collectPriorityAtPlate(match: Match, driving: Boolean): Alert? {
+        if (!driving || !priorityStay.allowAlert()) {
+            return null
+        }
+        val sequence = graph.sequences[match.sequenceId] ?: return null
+        if (sequence.lengthMeters <= 0.0) {
+            return null
+        }
+        for (obj in graph.objectsOn(match.sequenceId)) {
+            if (obj.type != RoadObjectType.PRIORITY_ROAD || !obj.isPoint) {
+                continue
+            }
+            if (AlertCopy.isPriorityEnd(obj.payload)) {
+                continue
+            }
+            if (!obj.direction.matches(match.direction)) {
+                continue
+            }
+            val signedMeters = if (match.direction == TravelDirection.MED) {
+                (obj.fromPos - match.position) * sequence.lengthMeters
+            } else {
+                (match.position - obj.fromPos) * sequence.lengthMeters
+            }
+            // Ahead up to the enter distance, or just past the plate (crossed it).
+            if (signedMeters > PRIORITY_AT_PLATE_METERS || signedMeters < -5.0) {
+                continue
+            }
+            if (!settings.enabled(AlertKind.PRIORITY_ROAD, obj.payload)) {
+                continue
+            }
+            val key = fireKey(AlertKind.PRIORITY_ROAD, obj.nvdbId)
+            if (!fired.add(key)) {
+                continue
+            }
+            priorityStay.markAlerted()
+            val metersAhead = signedMeters.coerceAtLeast(0.0)
+            return Alert(
+                kind = AlertKind.PRIORITY_ROAD,
+                nvdbId = obj.nvdbId,
+                metersAhead = metersAhead,
+                title = AlertCopy.titleFor(AlertKind.PRIORITY_ROAD, obj.payload),
+                body = AlertCopy.bodyFor(AlertKind.PRIORITY_ROAD, metersAhead, obj.payload),
+                sequenceId = obj.sequenceId,
+                objectType = RoadObjectType.PRIORITY_ROAD,
+                payload = obj.payload,
+            )
+        }
+        return null
+    }
+
+    private fun maybeAllowPriorityAlertAfterTurn(match: Match) {
+        val previousSequenceId = lastMatchSequenceId ?: return
+        val previousDirection = lastMatchDirection ?: return
+        if (!isTurnOntoNewRoad(previousSequenceId, previousDirection, match)) {
+            return
+        }
+        if (!isOnPriorityContext(match)) {
+            return
+        }
+        priorityStay.allowAlertAfterTurn()
+        lastInsidePriority.clear()
+    }
+
+    private fun isOnPriorityContext(match: Match): Boolean {
+        if (priorityStretchesOn(match).any { obj -> insideInterval(match.position, obj) }) {
+            return true
+        }
+        return isNearPriorityEntrancePlate(match)
+    }
+
+    private fun rememberMatch(match: Match) {
+        lastMatchSequenceId = match.sequenceId
+        lastMatchDirection = match.direction
+    }
+
+    /**
+     * True when the matcher moved onto a different sequence with a clear heading change
+     * (side street / turn). Straight continuation through a junction is not a new road.
+     */
+    private fun isTurnOntoNewRoad(
+        previousSequenceId: Long,
+        previousDirection: TravelDirection,
+        current: Match,
+    ): Boolean {
+        if (previousSequenceId == current.sequenceId) {
+            return false
+        }
+        val exitBearing = travelBearing(previousSequenceId, exitPosition(previousDirection), previousDirection)
+            ?: return true
+        val entryBearing = travelBearing(current.sequenceId, current.position, current.direction)
+            ?: return true
+        return Geo.headingDeltaDegrees(exitBearing, entryBearing) >= NEW_ROAD_TURN_DEGREES
+    }
+
+    private fun exitPosition(direction: TravelDirection): Double {
+        return if (direction == TravelDirection.MED) 1.0 else 0.0
+    }
+
+    private fun travelBearing(sequenceId: Long, position: Double, direction: TravelDirection): Double? {
+        val sequence = graph.sequences[sequenceId] ?: return null
+        val link = sequence.links.firstOrNull { candidate ->
+            position >= candidate.startPos - 1e-9 && position <= candidate.endPos + 1e-9
+        } ?: sequence.links.minByOrNull { candidate ->
+            kotlin.math.abs(((candidate.startPos + candidate.endPos) / 2.0) - position)
+        } ?: return null
+        if (link.points.size < 2) {
+            return null
+        }
+        val span = (link.endPos - link.startPos).let { if (it == 0.0) 1.0 else it }
+        val fraction = ((position - link.startPos) / span).coerceIn(0.0, 1.0)
+        val index = ((link.points.lastIndex - 1) * fraction).toInt()
+            .coerceIn(0, link.points.lastIndex - 1)
+        val start = link.points[index]
+        val end = link.points[index + 1]
+        val bearing = Geo.bearingDegrees(start, end)
+        return if (direction == TravelDirection.MED) {
+            bearing
+        } else {
+            (bearing + 180.0) % 360.0
+        }
     }
 
     private fun updatePriorityMembership(match: Match) {
@@ -443,4 +616,12 @@ class AlertEngine(
     }
 
     private fun fireKey(kind: AlertKind, nvdbId: Long) = "$kind:$nvdbId"
+
+    companion object {
+        /** Alert 206 plates only when this close — entering, not foreshadowing. */
+        const val PRIORITY_AT_PLATE_METERS = 20.0
+
+        /** Heading change that counts as turning onto a different road for speed re-confirm. */
+        const val NEW_ROAD_TURN_DEGREES = 40.0
+    }
 }

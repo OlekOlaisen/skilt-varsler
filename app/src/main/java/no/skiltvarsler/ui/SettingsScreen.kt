@@ -27,6 +27,8 @@ import no.skiltvarsler.legal.LegalCopy
 fun SettingsScreen(
     alertsMuted: Boolean,
     onAlertsMutedChange: (Boolean) -> Unit,
+    combineAlerts: Boolean,
+    onCombineAlertsChange: (Boolean) -> Unit,
     autoStartTracking: Boolean,
     onAutoStartTrackingChange: (Boolean) -> Unit,
     onOpenPrivacyPolicy: () -> Unit,
@@ -81,6 +83,24 @@ fun SettingsScreen(
             Switch(
                 checked = !alertsMuted,
                 onCheckedChange = { enabled -> onAlertsMutedChange(!enabled) },
+            )
+        }
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween,
+        ) {
+            Column(modifier = Modifier.weight(1f).padding(end = 12.dp)) {
+                Text("Kombiner varsler", style = MaterialTheme.typography.bodyLarge)
+                Text(
+                    "Samtidige skilt vises i samme heads-up (f.eks. «Forkjørsveg · Fartsgrense 30»), ikke etter hverandre.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.secondary,
+                )
+            }
+            Switch(
+                checked = combineAlerts,
+                onCheckedChange = onCombineAlertsChange,
             )
         }
         Text(

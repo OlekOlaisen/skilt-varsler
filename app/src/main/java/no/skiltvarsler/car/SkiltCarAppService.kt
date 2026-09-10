@@ -99,7 +99,10 @@ class StatusScreen(carContext: CarContext) : Screen(carContext) {
     private fun rowFor(sign: UpcomingSign): Row {
         val builder = Row.Builder()
             .setTitle(sign.title)
-            .addText(sign.distanceLabel)
+        val distance = sign.distanceLabel
+        if (distance.isNotBlank()) {
+            builder.addText(distance)
+        }
         val bitmap = SignRenderer.bitmap(
             carContext,
             sign.kind,
