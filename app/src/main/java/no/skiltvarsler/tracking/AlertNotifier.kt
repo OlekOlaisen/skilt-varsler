@@ -8,21 +8,22 @@ import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
+import android.graphics.Canvas
 import android.view.View
 import android.widget.RemoteViews
 import androidx.car.app.notification.CarAppExtender
 import androidx.car.app.notification.CarNotificationManager
 import androidx.car.app.notification.CarPendingIntent
 import androidx.core.app.NotificationCompat
-import androidx.core.app.NotificationManagerCompat
 import androidx.core.app.Person
 import androidx.core.app.RemoteInput
+import androidx.core.content.ContextCompat
 import androidx.core.graphics.drawable.IconCompat
 import no.skiltvarsler.MainActivity
 import no.skiltvarsler.R
-import no.skiltvarsler.log.DebugLog
 import no.skiltvarsler.car.CarMessageActionService
 import no.skiltvarsler.car.SkiltCarAppService
+import no.skiltvarsler.log.DebugLog
 import no.skiltvarsler.matcher.Alert
 import no.skiltvarsler.matcher.AlertCombine
 import no.skiltvarsler.matcher.AlertKind
@@ -33,6 +34,11 @@ object AlertNotifier {
     const val CHANNEL_ALERT = "alert"
     const val DRIVING_NOTIFICATION_ID = 10
     const val ALERT_NOTIFICATION_ID = 20
+    private const val SIGN_BITMAP_SIZE_PX = 192
+    private const val PHONE_CONTENT_REQUEST_CODE = 0
+    private const val CAR_CONTENT_REQUEST_CODE = 10
+    private const val REPLY_REQUEST_CODE = 11
+    private const val MARK_AS_READ_REQUEST_CODE = 12
 
     fun ensureChannels(context: Context) {
         val manager = context.getSystemService(NotificationManager::class.java)
@@ -117,35 +123,50 @@ object AlertNotifier {
         val icon = iconRes(displayAlert.kind)
         val titleText = displayAlert.title
         val subtitleText = displayAlert.body
-        val sign = SignRenderer.bitmap(context, displayAlert, 192)
+        val sign = signBitmap(context, displayAlert, icon)
+        val customView = alertRemoteViews(context, titleText, subtitleText, sign)
         val builder = NotificationCompat.Builder(context, CHANNEL_ALERT)
             .setSmallIcon(icon)
             .setContentTitle(titleText)
             .setContentText(subtitleText.ifBlank { null })
-            .setPriority(NotificationCompat.PRIORITY_HIGH)
-            .setCategory(NotificationCompat.CATEGORY_MESSAGE)
-            .setOnlyAlertOnce(true)
-            .setAutoCancel(true)
+            .setStyle(messagingStyleFor(context, titleText, subtitleText, sign))
+            .setLargeIcon(sign)
+            .setCustomContentView(customView)
+            .setCustomBigContentView(customView)
+            .setCustomHeadsUpContentView(customView)
             .setShowWhen(false)
-            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+            .setCategory(NotificationCompat.CATEGORY_MESSAGE)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setAutoCancel(true)
             .setContentIntent(phoneContentIntent(context))
+            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
             .addAction(replyAction(context))
             .addAction(markAsReadAction(context))
-        if (sign != null) {
-            val customView = alertRemoteViews(context, titleText, subtitleText, sign)
-            builder
-                .setStyle(messagingStyleFor(context, titleText, subtitleText, sign))
-                .setLargeIcon(sign)
-                .setCustomContentView(customView)
-                .setCustomBigContentView(customView)
-                .setCustomHeadsUpContentView(customView)
-        }
-        builder.extend(carAppExtender(context, titleText, subtitleText, icon, sign))
+            .extend(carAppExtender(context, titleText, subtitleText, icon, sign))
         try {
             CarNotificationManager.from(context).notify(ALERT_NOTIFICATION_ID, builder)
-        } catch (_: Exception) {
-            notifyOnPhone(context, builder)
+        } catch (error: SecurityException) {
+            DebugLog.append("NOTIFY permission denied")
+        } catch (error: Exception) {
+            DebugLog.append("NOTIFY car failed: ${error.message}")
         }
+    }
+
+    private fun signBitmap(context: Context, alert: Alert, icon: Int): Bitmap {
+        SignRenderer.bitmap(context, alert, SIGN_BITMAP_SIZE_PX)?.let { bitmap ->
+            return bitmap
+        }
+        val drawable = ContextCompat.getDrawable(context, icon)
+            ?: error("Missing notification icon $icon")
+        val bitmap = Bitmap.createBitmap(
+            SIGN_BITMAP_SIZE_PX,
+            SIGN_BITMAP_SIZE_PX,
+            Bitmap.Config.ARGB_8888,
+        )
+        val canvas = Canvas(bitmap)
+        drawable.setBounds(0, 0, SIGN_BITMAP_SIZE_PX, SIGN_BITMAP_SIZE_PX)
+        drawable.draw(canvas)
+        return bitmap
     }
 
     private fun alertRemoteViews(
@@ -204,24 +225,22 @@ object AlertNotifier {
         titleText: String,
         subtitleText: String,
         icon: Int,
-        sign: Bitmap?,
+        sign: Bitmap,
     ): CarAppExtender {
-        val extender = CarAppExtender.Builder()
+        return CarAppExtender.Builder()
             .setContentTitle(titleText)
             .setContentText(subtitleText)
             .setSmallIcon(icon)
+            .setLargeIcon(sign)
             .setImportance(NotificationManager.IMPORTANCE_HIGH)
             .setContentIntent(carAppContentIntent(context))
-        if (sign != null) {
-            extender.setLargeIcon(sign)
-        }
-        return extender.build()
+            .build()
     }
 
     private fun phoneContentIntent(context: Context): PendingIntent {
         return PendingIntent.getActivity(
             context,
-            1,
+            PHONE_CONTENT_REQUEST_CODE,
             Intent(context, MainActivity::class.java),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
@@ -233,7 +252,7 @@ object AlertNotifier {
         )
         return CarPendingIntent.getCarApp(
             context,
-            2,
+            CAR_CONTENT_REQUEST_CODE,
             carIntent,
             PendingIntent.FLAG_UPDATE_CURRENT,
         )
@@ -249,7 +268,7 @@ object AlertNotifier {
         }
         val replyPending = PendingIntent.getService(
             context,
-            11,
+            REPLY_REQUEST_CODE,
             replyIntent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_MUTABLE,
         )
@@ -257,7 +276,7 @@ object AlertNotifier {
             .setLabel(context.getString(R.string.car_notification_reply))
             .build()
         return NotificationCompat.Action.Builder(
-            iconRes(AlertKind.SPEED_CAMERA),
+            R.drawable.ic_alert_camera,
             context.getString(R.string.car_notification_reply),
             replyPending,
         )
@@ -273,30 +292,18 @@ object AlertNotifier {
         }
         val markPending = PendingIntent.getService(
             context,
-            12,
+            MARK_AS_READ_REQUEST_CODE,
             markIntent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
         return NotificationCompat.Action.Builder(
-            iconRes(AlertKind.SPEED_CAMERA),
+            R.drawable.ic_alert_camera,
             context.getString(R.string.car_notification_mark_as_read),
             markPending,
         )
             .setSemanticAction(NotificationCompat.Action.SEMANTIC_ACTION_MARK_AS_READ)
             .setShowsUserInterface(false)
             .build()
-    }
-
-    private fun notifyOnPhone(context: Context, builder: NotificationCompat.Builder) {
-        if (!NotificationManagerCompat.from(context).areNotificationsEnabled()) {
-            return
-        }
-        try {
-            NotificationManagerCompat.from(context)
-                .notify(ALERT_NOTIFICATION_ID, builder.build())
-        } catch (_: SecurityException) {
-            // Notification permission not granted yet.
-        }
     }
 
     fun iconRes(kind: AlertKind): Int = when (kind) {

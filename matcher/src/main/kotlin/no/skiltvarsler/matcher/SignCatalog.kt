@@ -174,8 +174,9 @@ object SignCatalog {
         val number = normalizeNumber(payload)
         when (number) {
             "146.1", "146" -> return "wildlife:elg"
-            "146.2" -> return "wildlife:hjort"
-            "146.3" -> return "wildlife:rein"
+            // NVDB skiltnummer: 146.2 Rein, 146.3 Hjort (not the older N300 swap).
+            "146.2" -> return "wildlife:rein"
+            "146.3" -> return "wildlife:hjort"
             "146.4" -> return "wildlife:storfe"
             "146.5" -> return "wildlife:sau"
         }

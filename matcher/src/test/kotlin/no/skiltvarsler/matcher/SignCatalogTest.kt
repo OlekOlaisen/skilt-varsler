@@ -17,6 +17,7 @@ class SignCatalogTest {
         assertThat(offElg.enabled(AlertKind.WILDLIFE, "Elg")).isFalse()
         assertThat(offElg.enabled(AlertKind.HAZARD, "146.1")).isFalse()
         assertThat(offElg.enabled(AlertKind.WILDLIFE, "Hjort")).isTrue()
+        assertThat(offElg.enabled(AlertKind.HAZARD, "146.3")).isTrue()
         assertThat(offElg.enabled(AlertKind.HAZARD, "146.2")).isTrue()
     }
 

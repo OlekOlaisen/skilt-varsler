@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from datetime import date
 from typing import Any, Iterable
 
@@ -20,6 +21,36 @@ STOP_NUMBERS = {"204", "204.0"}
 YIELD_NUMBERS = {"202", "202.0"}
 HAZARD_PREFIXES = tuple(str(n) for n in range(100, 157))
 INACTIVE_STATUS = ("nedlagt", "utgått", "utgatt", "fjernet", "sanert")
+
+# NVDB has no skiltnummer 109 (fartshump). Underskilt 808.105 "Fartsdempere" is the
+# practical marker used with speed bumps, so map it to the app's hazard:109 toggle.
+FARTSHUMP_ALIASES = {"808.105"}
+_SKILTNUMMER_RE = re.compile(r"^(\d+)(?:[._](\d+[a-zA-Z]?))?")
+
+
+def parse_skiltnummer(number: str) -> str | None:
+    """Extract canonical skiltnummer from NVDB verdi like '108 - Ujevn veg' or '146.1'."""
+    token = number.strip()
+    if not token:
+        return None
+    match = _SKILTNUMMER_RE.match(token)
+    if match is None:
+        return None
+    major = match.group(1)
+    minor = match.group(2)
+    if minor:
+        return f"{major}.{minor}"
+    return major
+
+
+def canonical_skilt_payload(number: str) -> str | None:
+    """Normalize plate payload; remap aliases that the app catalogs under another number."""
+    parsed = parse_skiltnummer(number)
+    if parsed is None:
+        return None
+    if parsed in FARTSHUMP_ALIASES:
+        return "109"
+    return parsed
 
 
 def _norm_name(navn: str) -> str:
@@ -209,7 +240,8 @@ def ingest_skiltplate(graph: TileGraph, objects: Iterable[dict[str, Any]], today
         mapped = classify_sign(number)
         if mapped is None:
             continue
-        if number.strip().startswith("110") and is_expired(obj, today):
+        payload = canonical_skilt_payload(number) or number.strip()
+        if payload == "110" and is_expired(obj, today):
             continue
         nvdb_id = int(obj["id"])
         for sted in stedfestinger(obj):
@@ -230,7 +262,7 @@ def ingest_skiltplate(graph: TileGraph, objects: Iterable[dict[str, Any]], today
                     from_pos=from_pos,
                     to_pos=to_pos,
                     direction=direction_of(sted),
-                    payload=number,
+                    payload=payload,
                 )
             )
 
@@ -292,7 +324,8 @@ def enrich_tunnel_signs(graph: TileGraph, tunnels: list[RoadObject]) -> None:
 
 def _is_tunnel_sign(payload: str) -> bool:
     token = payload.strip().split("|", 1)[0]
-    return token == "122" or token.startswith("122.")
+    parsed = parse_skiltnummer(token)
+    return parsed == "122" or (parsed is not None and parsed.startswith("122."))
 
 
 def _directions_match(left: str, right: str) -> bool:
@@ -381,7 +414,8 @@ def ingest_trafikkreguleringer(graph: TileGraph, objects: Iterable[dict[str, Any
 
 
 def _is_skiltnummer_payload(payload: str) -> bool:
-    return payload.replace(".", "").isdigit()
+    parsed = parse_skiltnummer(payload)
+    return parsed is not None and parsed.replace(".", "").isdigit()
 
 
 def prefer_skiltplate_over_regulering_for_stop_yield(graph: TileGraph) -> None:
@@ -412,14 +446,18 @@ def prefer_skiltplate_over_regulering_for_stop_yield(graph: TileGraph) -> None:
 
 
 def classify_sign(number: str) -> str | None:
-    token = number.strip()
-    if token in STOP_NUMBERS or token.startswith("204"):
+    parsed = parse_skiltnummer(number)
+    if parsed is None:
+        return None
+    if parsed in STOP_NUMBERS or parsed.startswith("204"):
         return "STOP"
-    if token in YIELD_NUMBERS or token.startswith("202"):
+    if parsed in YIELD_NUMBERS or parsed.startswith("202"):
         return "YIELD"
-    if token.startswith("206") or token.startswith("208"):
+    if parsed.startswith("206") or parsed.startswith("208"):
         return "PRIORITY_ROAD"
-    head = token.split(".")[0]
+    if parsed in FARTSHUMP_ALIASES:
+        return "HAZARD"
+    head = parsed.split(".", 1)[0]
     if head.isdigit() and 100 <= int(head) <= 156:
         return "HAZARD"
     return None

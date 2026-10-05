@@ -59,6 +59,29 @@ def test_classifies_stop_yield_and_hazard():
     assert classify_sign("206") == "PRIORITY_ROAD"
     assert classify_sign("208") == "PRIORITY_ROAD"
     assert classify_sign("362.80") is None
+    assert classify_sign("108 - Ujevn veg") == "HAZARD"
+    assert classify_sign("110 - Vegarbeid") == "HAZARD"
+    assert classify_sign("122 - Tunnel.") == "HAZARD"
+    assert classify_sign("204 - Stopp") == "STOP"
+    assert classify_sign("146.1 - Elg") == "HAZARD"
+    assert classify_sign("808.105 - Fartsdempere/Fartsdemparar") == "HAZARD"
+    assert classify_sign("808.111 - Is-svuller") is None
+
+
+def test_full_nvdb_verdi_ingests_as_canonical_payload():
+    graph = graph_with_sequence()
+    ingest_skiltplate(
+        graph,
+        [
+            nvdb_object(1, {"Skiltnummer": "108 - Ujevn veg"}),
+            nvdb_object(2, {"Skiltnummer": "808.105 - Fartsdempere/Fartsdemparar"}),
+            nvdb_object(3, {"Skiltnummer": "122 - Tunnel."}, from_pos=0.5),
+        ],
+    )
+    by_id = {obj.nvdb_id: obj for obj in graph.objects}
+    assert by_id[1].type == "HAZARD" and by_id[1].payload == "108"
+    assert by_id[2].type == "HAZARD" and by_id[2].payload == "109"
+    assert by_id[3].type == "HAZARD" and by_id[3].payload == "122"
 
 
 def test_skiltplate_wins_over_regulering_on_same_sequence():
@@ -139,7 +162,7 @@ def test_railway_without_barriers_uses_135():
 
 def test_tunnel_sign_gets_name_and_length():
     graph = graph_with_sequence(400.0)
-    ingest_skiltplate(graph, [nvdb_object(10, {"Skiltnummer": "122"}, from_pos=0.5)])
+    ingest_skiltplate(graph, [nvdb_object(10, {"Skiltnummer": "122 - Tunnel."}, from_pos=0.5)])
     tunnels = collect_tunnels(
         graph,
         [
