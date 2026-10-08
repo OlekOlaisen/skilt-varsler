@@ -97,7 +97,7 @@ object ReplayRunner {
             )
             if (objectCount == 0) {
                 LastAlertStore.setTracking(
-                    "Replay ${meta.name}: mangler NVDB-kart for ruten — bare distanse telles",
+                    "Replay ${meta.name}: mangler kart for ruten. Bare distanse telles.",
                 )
             }
             val engine = AlertEngine(graph, settings)

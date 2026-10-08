@@ -23,7 +23,7 @@ object SignLabel {
             if (titleOnly.isNotEmpty()) return titleOnly
         }
         val major = match.groupValues[1]
-        val minor = match.groupValues[2]
+        val minor = distanceSignMinor(major, match.groupValues[2])
         val dotted = if (minor.isEmpty()) major else "$major.$minor"
         return LABELS[dotted] ?: LABELS[major] ?: fallback
     }
@@ -45,14 +45,14 @@ object SignLabel {
         "108" to "Ujevn veg",
         "109" to "Fartshump",
         "110" to "Vegarbeid",
-        "112" to "Løs grus",
-        "114.1" to "Steinsprang",
-        "114.2" to "Steinsprang, motsatt side",
-        "114" to "Steinsprang",
+        "112" to "Steinsprut",
+        "114.1" to "Rasfare, høyre side",
+        "114.2" to "Rasfare, venstre side",
+        "114" to "Rasfare",
         "116" to "Glatt kjørebane",
-        "117" to "Høy vegkant",
+        "117" to "Farlig vegskulder",
         "118" to "Bevegelig bru",
-        "120" to "Kai eller ferjeleie",
+        "120" to "Kai, strand eller ferjeleie",
         "122" to "Tunnel",
         "124" to "Farlig vegkryss",
         "126" to "Rundkjøring",
@@ -67,16 +67,16 @@ object SignLabel {
         "138.1" to "Andreaskors",
         "138.2" to "Andreaskors, flere spor",
         "138" to "Andreaskors",
-        "140" to "Gående",
+        "140" to "Avstand til gangfelt",
         "142" to "Barn",
         "144" to "Syklende",
         "146.1" to "Elg",
         "146.2" to "Rein",
         "146.3" to "Hjort",
-        "146.4" to "Husdyr",
-        "146.5" to "Husdyr",
+        "146.4" to "Ku",
+        "146.5" to "Sau",
         "146" to "Viltfare",
-        "148" to "Motgående trafikk",
+        "148" to "Møtende trafikk",
         "150" to "Fly",
         "152" to "Sidevind",
         "153" to "Trafikkulykke",
@@ -88,4 +88,11 @@ object SignLabel {
         "206" to "Forkjørsveg",
         "208" to "Slutt på forkjørsveg",
     )
+
+    /** NVDB marks which side of the road a 136 distance plate faces with h or v. */
+    private fun distanceSignMinor(major: String, minor: String): String {
+        if (major != "136") return minor
+        val digits = minor.trimEnd('h', 'H', 'v', 'V')
+        return digits.ifEmpty { minor }
+    }
 }

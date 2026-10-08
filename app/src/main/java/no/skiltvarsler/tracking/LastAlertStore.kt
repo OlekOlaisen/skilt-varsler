@@ -30,12 +30,23 @@ data class UpcomingSign(
         }
 }
 
+data class TileLoadProgress(
+    val completed: Int,
+    val total: Int,
+    val label: String,
+) {
+    /** Null while the total is still unknown, so the bar stays indeterminate. */
+    val fraction: Float?
+        get() = if (total <= 0) null else (completed.toFloat() / total.toFloat()).coerceIn(0f, 1f)
+}
+
 object LastAlertStore {
     const val MAX_UPCOMING = 6
 
     private val last = AtomicReference<Alert?>(null)
     private val tracking = AtomicReference("Klar")
-    private val tile = AtomicReference("Ingen kart lastet")
+    private val tile = AtomicReference("Ikke lastet ennå")
+    private val tileLoad = AtomicReference<TileLoadProgress?>(null)
     private val upcoming = AtomicReference<List<UpcomingSign>>(emptyList())
     private val muted = AtomicBoolean(false)
     private val listeners = CopyOnWriteArrayList<() -> Unit>()
@@ -116,6 +127,23 @@ object LastAlertStore {
     }
 
     fun tileStatus(): String = tile.get()
+
+    fun tileLoad(): TileLoadProgress? = tileLoad.get()
+
+    fun setTileLoad(completed: Int, total: Int, label: String) {
+        val next = TileLoadProgress(completed, total, label)
+        if (tileLoad.get() == next) {
+            return
+        }
+        tileLoad.set(next)
+        notifyListeners()
+    }
+
+    fun clearTileLoad() {
+        if (tileLoad.getAndSet(null) != null) {
+            notifyListeners()
+        }
+    }
 
     private fun notifyListeners() {
         listeners.forEach { listener -> listener() }

@@ -126,9 +126,11 @@ class StatusScreen(carContext: CarContext) : Screen(carContext) {
             return "Start kjøretur på telefonen"
         }
         val status = LastAlertStore.trackingStatus()
-        if (status == "Ingen match" ||
-            status.startsWith("Henter") ||
-            status.startsWith("Kan ikke")
+        if (status.startsWith("Henter") ||
+            status.startsWith("Finner") ||
+            status.startsWith("Starter") ||
+            status.startsWith("Kan ikke") ||
+            status.startsWith("Venter")
         ) {
             return status
         }
@@ -138,7 +140,7 @@ class StatusScreen(carContext: CarContext) : Screen(carContext) {
     private fun emptySubtitle(muted: Boolean): String {
         return when {
             muted -> "Varsler er slått av"
-            !LastAlertStore.trackingActive -> "Varsler kommer som heads-up over kartet"
+            !LastAlertStore.trackingActive -> "Varsler vises over kartet"
             else -> "Neste skilt vises her underveis"
         }
     }

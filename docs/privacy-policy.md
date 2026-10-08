@@ -10,29 +10,29 @@ Utgiveren av appen (Olek Olaisen / prosjektet skilt-varsler). Kontakt via Google
 
 ## Hvilke data brukes
 
-- **Posisjon (GPS)** mens en kjøretur er aktiv, for å matche deg til vegnettet og varsle om skilt/hendelser foran deg.
-- **Innstillinger** (hvilke varsler som er på) lagres lokalt på telefonen.
-- **Valgfritt:** debug-logg som du selv kan eksportere fra Test-fanen.
+- **Posisjon** mens en kjøretur er i gang, for å varsle om det som ligger foran deg.
+- **Innstillinger** lagres på telefonen.
+- **Feilsøkingslogg**, bare hvis du selv starter den under Test og deler den.
 
 ## Hva vi ikke samler inn
 
-Appen har **ikke** brukerkonto, innlogging, analyse-SDK, annonser eller krasjrapportering til tredjepart. Posisjon sendes **ikke** til utgiveren.
+Ingen konto, innlogging, annonser eller sporing. Posisjonen sendes ikke til utgiveren.
 
 ## Kart og trafikkmeldinger
 
-Telefonen laster ned ferdige kartfiler (og eventuelt trafikksituasjoner) fra appens utgivelseskanal (GitHub Releases). Dette er anonyme filhentinger. Telefonen kontakter **ikke** NVDB direkte. Live veiarbeid kan bygges fra Statens vegvesen DATEX på vår side og publiseres som fil — ikke via direkte DATEX-kall fra telefonen med GPS.
+Kart og trafikkmeldinger lastes ned automatisk mens du kjører. Nedlastingen inneholder ikke posisjonen din.
 
 ## Android Auto
 
-Varsler kan vises i bilen. Samme lokasjonsregler gjelder: posisjon brukes på enheten under aktiv kjøretur med synlig forgrunnstjeneste.
+Varsler kan vises i bilen. Posisjon brukes bare på telefonen mens kjøreturen er i gang.
 
 ## Dine valg
 
-Du kan stoppe kjøretur, avslå lokasjonstilgang, dempe varsler, eller avinstallere appen for å fjerne lokale data.
+Du kan stoppe kjøreturen, avslå posisjonstilgang eller slå av varsler. Avinstaller appen for å slette det som ligger lagret på telefonen.
 
 ## Rettslig grunnlag
 
-Behandling skjer for å levere funksjonen du ber om når du starter kjøretur. Offentlige vegdata brukes under [NLOD](https://data.norge.no/nlod/no/) der det gjelder.
+Posisjon brukes for å levere varslene du har bedt om når du kjører.
 
 ## Ansvarsfraskrivelse
 

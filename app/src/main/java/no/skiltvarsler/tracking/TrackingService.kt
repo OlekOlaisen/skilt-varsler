@@ -183,8 +183,8 @@ class TrackingService : Service() {
         val match = engine?.currentMatch()
         val status = when {
             !GraphHolder.isReady() -> "Henter kart…"
-            match == null -> "Ingen match"
-            else -> "Lenke ${match.sequenceId}  pos ${"%.3f".format(match.position)}"
+            match == null -> "Finner vegen…"
+            else -> "Kjører"
         }
         LastAlertStore.setTracking(status)
         LastAlertStore.setUpcomingSigns(upcomingSigns())
@@ -298,8 +298,7 @@ class TrackingService : Service() {
         if (!GraphHolder.isReady()) {
             return
         }
-        val fileCount = graph.tileId.split('+').count { it.isNotBlank() }.coerceAtLeast(1)
-        LastAlertStore.setTileStatus(KartStatus.fromGraph(graph, fileCount))
+        LastAlertStore.setTileStatus(KartStatus.fromGraph(graph))
     }
 
     private fun maybePrefetchForLocation() {

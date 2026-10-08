@@ -31,8 +31,10 @@ class AlertCopyTest {
     @Test
     fun onlyAtkAlertsIncludeApproachDistance() {
         assertThat(AlertCopy.bodyFor(AlertKind.SPEED_CAMERA, 220.0)).isEqualTo("Om 220 m")
-        assertThat(AlertCopy.bodyFor(AlertKind.SECTION_ATK_START, 300.0)).isEqualTo("Om 300 m")
-        assertThat(AlertCopy.bodyFor(AlertKind.SECTION_ATK_END, 90.0)).isEqualTo("Om 90 m")
+        assertThat(AlertCopy.bodyFor(AlertKind.SECTION_ATK_START, 300.0)).isEqualTo("")
+        assertThat(AlertCopy.bodyFor(AlertKind.SECTION_ATK_END, 90.0)).isEqualTo("")
+        assertThat(AlertCopy.showsApproachDistance(AlertKind.SECTION_ATK_START)).isFalse()
+        assertThat(AlertCopy.showsApproachDistance(AlertKind.SECTION_ATK_END)).isFalse()
         assertThat(AlertCopy.bodyFor(AlertKind.YIELD, 40.0)).isEqualTo("Ved skiltet")
         assertThat(AlertCopy.bodyFor(AlertKind.PRIORITY_ROAD, 15.0, "206")).isEqualTo("")
         assertThat(AlertCopy.showsApproachDistance(AlertKind.SPEED_CAMERA)).isTrue()
@@ -43,10 +45,36 @@ class AlertCopyTest {
     fun ferryAndSectionAtkUseNames() {
         assertThat(AlertCopy.titleFor(AlertKind.FERRY, "775|Moss–Horten")).isEqualTo("Moss–Horten")
         assertThat(AlertCopy.titleFor(AlertKind.SECTION_ATK_START, "556.2|Lærdalstunnelen"))
+            .isEqualTo("Streknings-ATK")
+        assertThat(AlertCopy.bodyFor(AlertKind.SECTION_ATK_START, 180.0, "556.2|Lærdalstunnelen"))
             .isEqualTo("Lærdalstunnelen")
+        assertThat(AlertCopy.titleFor(AlertKind.SECTION_ATK_START, "556.2"))
+            .isEqualTo("Streknings-ATK")
+        assertThat(AlertCopy.bodyFor(AlertKind.SECTION_ATK_START, 0.0, "556.2")).isEqualTo("")
+        assertThat(AlertCopy.sectionAverageBody(78)).isEqualTo("Gjennomsnittsfart 78 km/t")
+        assertThat(AlertCopy.titleFor(AlertKind.SECTION_ATK_END, "556.2|Lærdalstunnelen"))
+            .isEqualTo("Slutt streknings-ATK")
         assertThat(AlertCopy.titleFor(AlertKind.WILDLIFE, "Elg")).isEqualTo("Viltfare — elg")
         assertThat(AlertCopy.titleFor(AlertKind.PRIORITY_ROAD, "206")).isEqualTo("Forkjørsveg")
         assertThat(AlertCopy.titleFor(AlertKind.PRIORITY_ROAD, "208")).isEqualTo("Slutt på forkjørsveg")
+    }
+
+    @Test
+    fun liveSituationsUseNorwegianTitles() {
+        val roadwork = "roadwork|Vegarbeid, vegen er stengt, gyldig mellom 09:30 og 13:00"
+        assertThat(AlertCopy.titleFor(AlertKind.ROADWORK, roadwork)).isEqualTo("Vegarbeid")
+        assertThat(AlertCopy.bodyFor(AlertKind.ROADWORK, 200.0, roadwork))
+            .isEqualTo("Vegarbeid, vegen er stengt, gyldig mellom 09:30 og 13:00")
+
+        val closure = "closure|Vegarbeid, vegen er stengt."
+        assertThat(AlertCopy.titleFor(AlertKind.ROADWORK, closure)).isEqualTo("Stengt veg")
+        assertThat(AlertCopy.bodyFor(AlertKind.ROADWORK, 200.0, closure))
+            .isEqualTo("Vegarbeid, vegen er stengt.")
+
+        val accident = "accident|Trafikkulykke, ett stengt kjørefelt."
+        assertThat(AlertCopy.titleFor(AlertKind.ACCIDENT, accident)).isEqualTo("Trafikkulykke")
+        assertThat(AlertCopy.bodyFor(AlertKind.ACCIDENT, 200.0, accident))
+            .isEqualTo("Trafikkulykke, ett stengt kjørefelt.")
     }
 
     @Test

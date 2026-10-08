@@ -7,6 +7,7 @@ import androidx.work.WorkerParameters
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
+import no.skiltvarsler.log.DebugLog
 import no.skiltvarsler.settings.SettingsStore
 import no.skiltvarsler.situations.SituationsDownloader
 import no.skiltvarsler.tilesource.AndroidTileLoader
@@ -25,7 +26,7 @@ class TilePrefetchWorker(
     override suspend fun doWork(): Result = withContext(Dispatchers.IO) {
         val base = SettingsStore(applicationContext).tileBaseUrl.first().trimEnd('/')
         if (base.isBlank()) {
-            LastAlertStore.setTileStatus("Ingen kart-URL satt")
+            LastAlertStore.setTileStatus("Kart er ikke tilgjengelig")
             return@withContext Result.success()
         }
         val cacheDir = File(applicationContext.filesDir, "tiles").apply { mkdirs() }
@@ -34,9 +35,10 @@ class TilePrefetchWorker(
             val latitude = LastAlertStore.latitude
             val longitude = LastAlertStore.longitude
             if (latitude == null || longitude == null) {
-                LastAlertStore.setTileStatus("Venter på GPS for å hente kart")
+                LastAlertStore.setTileStatus("Venter på posisjon")
                 return@withContext Result.success()
             }
+            LastAlertStore.setTileLoad(0, 0, "Henter kart")
             val localManifest = File(cacheDir, "manifest.json")
             val cachedManifest = readManifestIfFresh(localManifest)
             val manifestJson = cachedManifest ?: JSONObject(downloadText("$base/manifest.json"))
@@ -47,14 +49,23 @@ class TilePrefetchWorker(
                 .select(allTiles, latitude, longitude, LastAlertStore.bearingDegrees)
                 .filterNot { ahead -> windowTiles.any { it.id == ahead.id } }
             val localVersions = readLocalVersions(localManifest)
-            var downloaded = download(windowTiles, cacheDir, base, localVersions)
+            val pending = (windowTiles + aheadTiles).count { tile ->
+                needsDownload(tile, cacheDir, localVersions)
+            }
+            val totalSteps = pending + 1
+            var completed = 0
+            LastAlertStore.setTileLoad(0, totalSteps, "Henter kart")
+            var downloaded = download(windowTiles, cacheDir, base, localVersions) { label ->
+                completed += 1
+                LastAlertStore.setTileLoad(completed, totalSteps, label)
+            }
             if (cachedManifest == null) {
                 localManifest.writeText(manifestJson.toString())
             }
             val files = GraphHolder.windowFilesFor(latitude, longitude)
             if (files.isEmpty()) {
                 GraphHolder.clear()
-                LastAlertStore.setTileStatus(statusText(allTiles, files, downloaded, latitude, longitude))
+                LastAlertStore.setTileStatus(statusText(allTiles, files, latitude, longitude))
                 return@withContext Result.success()
             }
             if (downloaded > 0 || !GraphHolder.covers(files)) {
@@ -62,22 +73,44 @@ class TilePrefetchWorker(
                     GraphHolder.loadNear(files, latitude, longitude)
                 } catch (error: SQLiteException) {
                     files.forEach { file -> file.delete() }
-                    LastAlertStore.setTileStatus("Kartfeil: korrupt kartfil, henter på nytt")
+                    LastAlertStore.setTileStatus("Kartfilen var ødelagt. Prøver igjen.")
                     return@withContext Result.retry()
                 }
             }
-            downloaded += download(aheadTiles, cacheDir, base, localVersions)
+            downloaded += download(aheadTiles, cacheDir, base, localVersions) { label ->
+                completed += 1
+                LastAlertStore.setTileLoad(completed, totalSteps, label)
+            }
+            LastAlertStore.setTileLoad(completed, totalSteps, "Henter trafikkmeldinger")
             SituationsDownloader.downloadAndLoad(applicationContext, base)
-            LastAlertStore.setTileStatus(statusText(allTiles, files, downloaded, latitude, longitude))
+            completed += 1
+            LastAlertStore.setTileLoad(completed.coerceAtMost(totalSteps), totalSteps, "Henter trafikkmeldinger")
+            LastAlertStore.setTileStatus(statusText(allTiles, files, latitude, longitude))
             Result.success()
         } catch (error: OutOfMemoryError) {
             GraphHolder.clear()
-            LastAlertStore.setTileStatus("Kartfeil: for lite minne til kartet")
+            LastAlertStore.setTileStatus("For lite minne til kartet")
             Result.failure()
         } catch (error: Exception) {
-            LastAlertStore.setTileStatus("Kartfeil: ${error.message ?: error.javaClass.simpleName}")
+            DebugLog.append("TILE fetch failed: ${error.message ?: error.javaClass.simpleName}")
+            LastAlertStore.setTileStatus("Klarte ikke å hente kart")
             Result.retry()
+        } finally {
+            LastAlertStore.clearTileLoad()
         }
+    }
+
+    private fun needsDownload(
+        tile: ManifestTile,
+        cacheDir: File,
+        localVersions: Map<String, String>,
+    ): Boolean {
+        val target = File(cacheDir, tile.file)
+        val versionOk = localVersions[tile.id] == tile.version
+        if (target.exists() && !AndroidTileLoader.isReadable(target)) {
+            target.delete()
+        }
+        return !(target.exists() && versionOk && AndroidTileLoader.isReadable(target))
     }
 
     private fun download(
@@ -85,21 +118,23 @@ class TilePrefetchWorker(
         cacheDir: File,
         base: String,
         localVersions: Map<String, String>,
+        onFile: (label: String) -> Unit,
     ): Int {
         var downloaded = 0
         for (tile in tiles) {
-            val target = File(cacheDir, tile.file)
-            val versionOk = localVersions[tile.id] == tile.version
-            if (target.exists() && !AndroidTileLoader.isReadable(target)) {
-                target.delete()
-            }
-            if (target.exists() && versionOk && AndroidTileLoader.isReadable(target)) {
+            if (!needsDownload(tile, cacheDir, localVersions)) {
                 continue
             }
-            val kommuneLabel = KartStatus.formatNames(KartStatus.tileIdsToNames(tile.id))
-            LastAlertStore.setTileStatus("Henter kart for $kommuneLabel…")
-            downloadAtomically(target, "$base/${tile.file}")
+            val names = KartStatus.tileIdsToNames(tile.id)
+            val label = if (names.isEmpty()) {
+                "Henter kart"
+            } else {
+                "Henter kart for ${KartStatus.formatNames(names)}"
+            }
+            LastAlertStore.setTileStatus(label)
+            downloadAtomically(File(cacheDir, tile.file), "$base/${tile.file}")
             downloaded += 1
+            onFile(label)
         }
         return downloaded
     }
@@ -107,19 +142,17 @@ class TilePrefetchWorker(
     private fun statusText(
         allTiles: List<ManifestTile>,
         files: List<File>,
-        downloaded: Int,
         latitude: Double?,
         longitude: Double?,
     ): String {
-        if (allTiles.isEmpty()) return "Ingen kart i manifestet"
+        if (allTiles.isEmpty()) return "Ingen kart tilgjengelig"
         if (files.isEmpty() && latitude != null && longitude != null) {
             return "Ingen kart for denne posisjonen ennå"
         }
         if (files.isEmpty()) {
-            return "Venter på GPS for å hente kart"
+            return "Venter på posisjon"
         }
-        val graph = GraphHolder.current()
-        return KartStatus.fromGraph(graph, files.size, downloaded)
+        return KartStatus.fromGraph(GraphHolder.current())
     }
 
     /**

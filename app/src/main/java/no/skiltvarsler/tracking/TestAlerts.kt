@@ -24,7 +24,7 @@ object TestAlerts {
     fun labelFor(sign: SignOption): String = when (sign.kind) {
         AlertKind.TOLL -> "Bomstasjon 42 kr"
         AlertKind.FERRY -> "Ferje Moss–Horten"
-        AlertKind.SECTION_ATK_START -> "Streknings-ATK Lærdalstunnelen"
+        AlertKind.SECTION_ATK_START -> "Streknings-ATK"
         AlertKind.HAZARD -> if (sign.payload.startsWith("122")) {
             "Lærdalstunnelen"
         } else {

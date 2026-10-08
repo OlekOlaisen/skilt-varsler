@@ -35,29 +35,24 @@ fun StatsScreen(
             .padding(horizontal = 20.dp, vertical = 16.dp),
     ) {
         Text(
-            "Statistikk",
-            style = MaterialTheme.typography.headlineSmall,
+            if (summary == null) "Statistikk" else "Siste kjøretur",
+            style = MaterialTheme.typography.headlineMedium,
             fontWeight = FontWeight.SemiBold,
             color = MaterialTheme.colorScheme.onBackground,
         )
         if (summary == null) {
             Text(
-                "Ingen kjøretur ennå. Start en tur eller kjør en replay for å se fotobokser, bompenger og mer.",
-                style = MaterialTheme.typography.bodyMedium,
+                "Ingen kjøretur ennå.",
+                style = MaterialTheme.typography.bodyLarge,
                 color = MaterialTheme.colorScheme.secondary,
                 modifier = Modifier.padding(top = 12.dp),
             )
         } else {
-            Text(
-                "Oppsummering av det appen varslet underveis. Bomtakst er estimert med Skyttelpass-rabatt.",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.secondary,
-                modifier = Modifier.padding(top = 8.dp, bottom = 12.dp),
-            )
             Column(
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxWidth()
+                    .padding(top = 16.dp)
                     .verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
@@ -79,7 +74,7 @@ fun StatsScreen(
                     kind = AlertKind.TOLL,
                 )
                 StatRow(
-                    label = "Bompenger (est.)",
+                    label = "Bompenger, Skyttelpass",
                     value = summary.tollKronerLabel(),
                     kind = AlertKind.TOLL,
                 )

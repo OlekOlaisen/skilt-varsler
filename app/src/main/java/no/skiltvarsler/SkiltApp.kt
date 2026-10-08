@@ -10,6 +10,7 @@ import no.skiltvarsler.log.DebugLog
 import no.skiltvarsler.prefetch.TilePrefetchWorker
 import no.skiltvarsler.situations.SituationsHolder
 import no.skiltvarsler.tilesource.GraphHolder
+import no.skiltvarsler.tilesource.KartStatus
 import no.skiltvarsler.tracking.AlertNotifier
 import no.skiltvarsler.tracking.LastAlertStore
 import java.io.File
@@ -22,7 +23,11 @@ class SkiltApp : Application() {
         DebugLog.init(this)
         GraphHolder.loadFromCache(File(filesDir, "tiles"))
         loadSituations()
-        LastAlertStore.setTileStatus("Klar. Start for å hente kart.")
+        if (GraphHolder.isReady()) {
+            LastAlertStore.setTileStatus(KartStatus.fromGraph(GraphHolder.current()))
+        } else {
+            LastAlertStore.setTileStatus("Ikke lastet ennå")
+        }
         val manager = WorkManager.getInstance(this)
         val wifi = Constraints.Builder()
             .setRequiredNetworkType(NetworkType.UNMETERED)

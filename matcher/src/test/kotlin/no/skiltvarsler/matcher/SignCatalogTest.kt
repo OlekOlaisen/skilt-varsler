@@ -22,6 +22,21 @@ class SignCatalogTest {
     }
 
     @Test
+    fun levelCrossingDistanceSignsIgnoreSideLetter() {
+        val onlyFar = AlertSettings(
+            byId = mapOf(
+                "hazard:136.1" to true,
+                "hazard:136.2" to false,
+                "hazard:136.3" to false,
+            ),
+        )
+        assertThat(onlyFar.enabled(AlertKind.HAZARD, "136.1v")).isTrue()
+        assertThat(onlyFar.enabled(AlertKind.HAZARD, "136.1h")).isTrue()
+        assertThat(onlyFar.enabled(AlertKind.HAZARD, "136.2v")).isFalse()
+        assertThat(onlyFar.enabled(AlertKind.HAZARD, "136.3h")).isFalse()
+    }
+
+    @Test
     fun hazardNumberIsItsOwnToggle() {
         val settings = AlertSettings(byId = mapOf("hazard:100.1" to false, "hazard:110" to true))
         assertThat(settings.enabled(AlertKind.HAZARD, "100.1")).isFalse()
@@ -59,7 +74,12 @@ class SignCatalogTest {
         assertThat(byPayload["100.1"]).isEqualTo("Farlig sving til høyre")
         assertThat(byPayload["102.1"]).isEqualTo("Farlige svinger, første til høyre")
         assertThat(byPayload["138.1"]).isEqualTo("Andreaskors")
-        assertThat(byPayload["140"]).isEqualTo("Gående")
+        assertThat(byPayload["112"]).isEqualTo("Steinsprut")
+        assertThat(byPayload["114.1"]).isEqualTo("Rasfare, høyre side")
+        assertThat(byPayload["117"]).isEqualTo("Farlig vegskulder")
+        assertThat(byPayload["120"]).isEqualTo("Kai, strand eller ferjeleie")
+        assertThat(byPayload["140"]).isEqualTo("Avstand til gangfelt")
+        assertThat(byPayload["148"]).isEqualTo("Møtende trafikk")
         assertThat(byPayload["142"]).isEqualTo("Barn")
         assertThat(byPayload["144"]).isEqualTo("Syklende")
         assertThat(byPayload["150"]).isEqualTo("Fly")

@@ -8,8 +8,8 @@ object LegalCopy {
         "https://github.com/OlekOlaisen/skilt-varsler/blob/main/docs/privacy-policy.md"
 
     const val SHORT_PRIVACY =
-        "Posisjon brukes bare på telefonen til å treffe vegnettet og varsle. " +
-            "Appen har ikke konto, analyse eller annonser. Telefonen kontakter ikke NVDB direkte."
+        "Posisjon brukes bare på telefonen mens du kjører, for å varsle om skilt foran deg. " +
+            "Appen har ikke konto, analyse eller annonser."
 
     const val SHORT_DISCLAIMER =
         "Skilt-varsler er et hjelpemiddel og erstatter ikke skilting, navigasjon eller " +
@@ -19,29 +19,24 @@ object LegalCopy {
 
     val privacySections: List<Pair<String, String>> = listOf(
         "Hvem vi er" to
-            "Skilt-varsler er en Android-app som varsler om skilt og hendelser langs norske veger. " +
-            "Behandlingsansvarlig er utgiveren av appen (Olek Olaisen / prosjektet skilt-varsler).",
+            "Skilt-varsler varsler om skilt og hendelser langs norske veger. " +
+            "Behandlingsansvarlig er utgiveren av appen (Olek Olaisen).",
         "Hvilke data brukes" to
-            "• Posisjon (GPS) mens kjøretur er aktiv, for å mappe deg til vegnettet og varsle.\n" +
-            "• Valgte innstillinger (hvilke varsler som er på) lagres lokalt på telefonen.\n" +
-            "• Valgfritt: debug-logg du selv eksporterer fra Test-fanen.",
+            "• Posisjon mens en kjøretur er i gang, for å varsle om det som ligger foran deg.\n" +
+            "• Innstillingene dine lagres på telefonen.\n" +
+            "• En feilsøkingslogg, bare hvis du selv starter den under Test og deler den.",
         "Hva vi ikke samler inn" to
-            "Appen har ikke brukerkonto, innlogging, analyse-SDK, annonser eller krasjrapportering " +
-            "til tredjepart. Posisjon sendes ikke til oss.",
+            "Ingen konto, innlogging, annonser eller sporing. Posisjonen sendes ikke til oss.",
         "Kart og trafikkmeldinger" to
-            "Telefonen laster ned ferdige kartfiler og eventuelt trafikksituasjoner fra appens " +
-            "utgivelseskanal (GitHub Releases). Nedlastingene er anonyme filhentinger. " +
-            "Rå NVDB-data hentes ikke fra telefonen. Live veiarbeid kan komme fra Statens vegvesen " +
-            "DATEX via vår byggserver, ikke direkte fra telefonen.",
+            "Kart og trafikkmeldinger lastes ned automatisk mens du kjører. " +
+            "Nedlastingen inneholder ikke posisjonen din.",
         "Android Auto" to
-            "Varsler kan vises i bilen via Android Auto. Samme lokasjonsbehandling gjelder: " +
-            "posisjon brukes på enheten under aktiv kjøretur.",
+            "Varsler kan vises i bilen. Posisjon brukes bare på telefonen mens kjøreturen er i gang.",
         "Dine valg" to
-            "Du kan stoppe kjøretur når som helst, avslå lokasjonstilgang, eller dempe varsler. " +
-            "Avinstaller appen for å fjerne lokale innstillinger og hurtigbuffer.",
+            "Du kan stoppe kjøreturen, avslå posisjonstilgang eller slå av varsler. " +
+            "Avinstaller appen for å slette det som ligger lagret på telefonen.",
         "Rettslig grunnlag" to
-            "Behandling skjer for å levere funksjonen du ber om (kontrakt/nødvendig for tjenesten) " +
-            "når du starter kjøretur. Vegdata er offentlige data under NLOD der det gjelder.",
+            "Posisjon brukes for å levere varslene du har bedt om når du kjører.",
         "Kontakt" to
             "Spørsmål om personvern: bruk kontaktinformasjonen i Google Play-oppføringen, " +
             "eller prosjektets GitHub-side.",

@@ -32,12 +32,7 @@ fun AlertsScreen(
             .padding(start = 20.dp, end = 20.dp, top = 16.dp, bottom = 32.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Text("Varsler", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold)
-        Text(
-            "Velg hvilke skilt som skal varsles under kjøreturen. Valgene huskes.",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.secondary,
-        )
+        Text("Varsler", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.SemiBold)
         SignCatalog.groups.forEach { group ->
             GroupHeader(
                 title = group.title,

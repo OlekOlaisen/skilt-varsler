@@ -50,14 +50,22 @@ class SignAssetIdTest {
     fun wildlifeNameMapsTo146Series() {
         assertThat(SignAssetId.candidates(AlertKind.WILDLIFE, "Elg", 1L).first())
             .isEqualTo("146_1.svg")
-        assertThat(SignAssetId.candidates(AlertKind.WILDLIFE, "Hjort", 1L).first())
+        assertThat(SignAssetId.candidates(AlertKind.WILDLIFE, "Rein", 1L).first())
             .isEqualTo("146_2.svg")
+        assertThat(SignAssetId.candidates(AlertKind.WILDLIFE, "Hjort", 1L).first())
+            .isEqualTo("146_3.svg")
     }
 
     @Test
     fun hazardPrefersSkiltnummerFromPayload() {
         assertThat(SignAssetId.candidates(AlertKind.HAZARD, "146.1", 1L).first())
             .isEqualTo("146_1.svg")
+        assertThat(SignAssetId.candidates(AlertKind.HAZARD, "136.1v", 1L).first())
+            .isEqualTo("136_1.svg")
+        assertThat(SignAssetId.candidates(AlertKind.HAZARD, "136.2h", 1L).first())
+            .isEqualTo("136_2.svg")
+        assertThat(SignAssetId.candidates(AlertKind.HAZARD, "136.3v", 1L).first())
+            .isEqualTo("136_3.svg")
         assertThat(SignAssetId.candidates(AlertKind.HAZARD, "122|Lærdalstunnelen|24500", 1L))
             .contains("122_0.svg")
     }

@@ -101,24 +101,24 @@ object AlertCopy {
             AlertKind.PRIORITY_ROAD -> {
                 if (isPriorityEnd(payload)) "Slutt på forkjørsveg" else "Forkjørsveg"
             }
-            AlertKind.SECTION_ATK_START -> namedOrFallback(parsed, "Streknings-ATK")
+            AlertKind.SECTION_ATK_START -> "Streknings-ATK"
             AlertKind.SECTION_ATK_END -> "Slutt streknings-ATK"
             AlertKind.WILDLIFE -> wildlifeTitle(payload)
             AlertKind.SPEED_LIMIT -> payload
-            AlertKind.ROADWORK -> namedOrFallback(
-                parsed,
-                SituationType.fromWire(parsed.code)?.defaultTitle ?: "Veiarbeid",
-            )
-            AlertKind.ACCIDENT -> namedOrFallback(
-                parsed,
-                SituationType.fromWire(parsed.code)?.defaultTitle ?: "Trafikkulykke",
-            )
+            AlertKind.ROADWORK -> situationTitle(parsed, "Vegarbeid")
+            AlertKind.ACCIDENT -> situationTitle(parsed, "Trafikkulykke")
         }
     }
 
     fun bodyFor(kind: AlertKind, metersAhead: Double, payload: String = ""): String {
         if (kind == AlertKind.STOP || kind == AlertKind.YIELD) {
             return "Ved skiltet"
+        }
+        if (kind == AlertKind.SECTION_ATK_START) {
+            return sectionAtkName(ObjectPayload.parse(payload))
+        }
+        if (kind == AlertKind.SECTION_ATK_END) {
+            return ""
         }
         val extra = extraBody(kind, payload)
         val showApproachDistance = showsApproachDistance(kind) && metersAhead >= 1.0
@@ -136,21 +136,19 @@ object AlertCopy {
         if (extra.isNotEmpty()) {
             return extra
         }
-        if (metersAhead < 1.0) {
-            return when (kind) {
-                AlertKind.SECTION_ATK_START -> "Gjennomsnittsfart"
-                AlertKind.SECTION_ATK_END -> "Hold snittfarten"
-                else -> ""
-            }
-        }
         return ""
     }
 
-    /** Approach distance is noisy for most signs; only ATK-style alerts keep it. */
+    /** Approach distance is noisy for most signs; only point cameras keep it. */
     fun showsApproachDistance(kind: AlertKind): Boolean {
-        return kind == AlertKind.SPEED_CAMERA ||
-            kind == AlertKind.SECTION_ATK_START ||
-            kind == AlertKind.SECTION_ATK_END
+        return kind == AlertKind.SPEED_CAMERA
+    }
+
+    fun sectionAverageBody(kmh: Int?): String {
+        if (kmh == null || kmh <= 0) {
+            return "Gjennomsnittsfart"
+        }
+        return "Gjennomsnittsfart $kmh km/t"
     }
 
     fun extraBody(kind: AlertKind, payload: String): String {
@@ -188,6 +186,14 @@ object AlertCopy {
         return "${meters.roundToInt()} m"
     }
 
+    private fun sectionAtkName(parsed: ObjectPayload): String {
+        val name = namedOrFallback(parsed, "")
+        if (name.isBlank() || name.equals("Streknings-ATK", ignoreCase = true)) {
+            return ""
+        }
+        return name
+    }
+
     private fun wildlifeTitle(payload: String): String {
         val parsed = ObjectPayload.parse(payload)
         val art = parsed.title.ifBlank { SignLabel.displayName(payload, "") }
@@ -196,6 +202,18 @@ object AlertCopy {
         }
         val species = art.replaceFirstChar { character -> character.lowercase() }
         return "Viltfare — $species"
+    }
+
+    /**
+     * DATEX payloads start with an English wire code (`roadwork|…`).
+     * Closures share [AlertKind.ROADWORK], so the Norwegian title comes from that code.
+     */
+    private fun situationTitle(parsed: ObjectPayload, fallback: String): String {
+        val fromWire = SituationType.fromWire(parsed.title) ?: SituationType.fromWire(parsed.code)
+        if (fromWire != null) {
+            return fromWire.defaultTitle
+        }
+        return namedOrFallback(parsed, fallback)
     }
 
     private fun namedOrFallback(parsed: ObjectPayload, fallback: String): String {

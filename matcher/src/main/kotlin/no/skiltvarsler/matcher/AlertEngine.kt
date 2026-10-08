@@ -22,6 +22,8 @@ class AlertEngine(
     private var lastKommune: Int? = null
     private var lastInsideWildlife = HashSet<Long>()
     private var lastInsideSectionAtk = HashSet<Long>()
+    private val sectionPace = HashMap<Long, SectionPace>()
+    private val pendingSectionExits = LinkedHashSet<Long>()
     private var lastInsidePriority = HashSet<Long>()
     private var lastMatchSequenceId: Long? = null
     private var lastMatchDirection: TravelDirection? = null
@@ -56,6 +58,8 @@ class AlertEngine(
         lastKommune = null
         lastInsideWildlife.clear()
         lastInsideSectionAtk.clear()
+        sectionPace.clear()
+        pendingSectionExits.clear()
         lastInsidePriority.clear()
         lastMatchSequenceId = null
         lastMatchDirection = null
@@ -98,6 +102,7 @@ class AlertEngine(
             AlertKind.WILDLIFE,
             alerting,
         )?.let { alerts.add(it) }
+        val previouslyInsideSectionAtk = HashSet(lastInsideSectionAtk)
         collectIntervalEntries(
             match,
             lastInsideSectionAtk,
@@ -105,7 +110,8 @@ class AlertEngine(
             AlertKind.SECTION_ATK_START,
             alerting,
         )?.let { alerts.add(it) }
-        collectSectionAtkExit(match, alerting)?.let { alerts.add(it) }
+        trackSectionPace(match, fix.timeMs, speed, lastInsideSectionAtk)
+        collectSectionAtkExit(match, previouslyInsideSectionAtk)?.let { alerts.add(it) }
         collectRoadworks(fix, alerting, speed)?.let { alerts.add(it) }
         collectAccidents(fix, alerting, speed)?.let { alerts.add(it) }
 
@@ -575,33 +581,67 @@ class AlertEngine(
         return entered
     }
 
-    private fun collectSectionAtkExit(match: Match, driving: Boolean): Alert? {
-        if (!driving || !settings.enabled(AlertKind.SECTION_ATK_END)) return null
-        val sequence = graph.sequences[match.sequenceId] ?: return null
-        for (obj in graph.objectsOn(match.sequenceId)) {
-            if (obj.type != RoadObjectType.SECTION_ATK) continue
-            if (!obj.direction.matches(match.direction)) continue
-            val exitPos = if (match.direction == TravelDirection.MED) {
-                maxOf(obj.fromPos, obj.toPos)
-            } else {
-                minOf(obj.fromPos, obj.toPos)
+    /**
+     * Distance and time along the matched road while the fix stays inside a section.
+     * Parked jitter is ignored so the exit alert can report the driven average.
+     */
+    private fun trackSectionPace(
+        match: Match,
+        timeMs: Long,
+        speedMetersPerSecond: Double,
+        insideIds: Set<Long>,
+    ) {
+        val lengthMeters = graph.sequences[match.sequenceId]?.lengthMeters ?: 0.0
+        val moving = speedMetersPerSecond >= AlertWindows.MIN_DRIVING_SPEED_METERS_PER_SECOND
+        for (nvdbId in insideIds) {
+            val pace = sectionPace.getOrPut(nvdbId) { SectionPace() }
+            val sameSequence = pace.anchorSequenceId == match.sequenceId
+            val elapsed = timeMs - pace.anchorTimeMs
+            if (moving && pace.anchorTimeMs >= 0 && sameSequence && lengthMeters > 0.0 && elapsed in 1..15_000) {
+                val moved = kotlin.math.abs(match.position - pace.anchorPosition) * lengthMeters
+                if (moved <= 400.0) {
+                    pace.distanceMeters += moved
+                    pace.elapsedMs += elapsed
+                }
             }
-            val meters = kotlin.math.abs(exitPos - match.position) * sequence.lengthMeters
-            if (meters > 80.0 || meters < 1.0) continue
-            val key = fireKey(AlertKind.SECTION_ATK_END, obj.nvdbId)
+            pace.anchorTimeMs = timeMs
+            pace.anchorSequenceId = match.sequenceId
+            pace.anchorPosition = match.position
+        }
+    }
+
+    private fun collectSectionAtkExit(match: Match, previouslyInside: Set<Long>): Alert? {
+        val left = LinkedHashSet(pendingSectionExits)
+        pendingSectionExits.clear()
+        for (nvdbId in previouslyInside) {
+            if (nvdbId !in lastInsideSectionAtk) {
+                left.add(nvdbId)
+            }
+        }
+        if (!settings.enabled(AlertKind.SECTION_ATK_END)) {
+            left.forEach { nvdbId -> sectionPace.remove(nvdbId) }
+            return null
+        }
+        var chosen: Alert? = null
+        for (nvdbId in left) {
+            if (chosen != null) {
+                pendingSectionExits.add(nvdbId)
+                continue
+            }
+            val pace = sectionPace.remove(nvdbId)
+            val key = fireKey(AlertKind.SECTION_ATK_END, nvdbId)
             if (!fired.add(key)) continue
-            return Alert(
+            chosen = Alert(
                 kind = AlertKind.SECTION_ATK_END,
-                nvdbId = obj.nvdbId,
-                metersAhead = meters,
-                title = AlertCopy.titleFor(AlertKind.SECTION_ATK_END, obj.payload),
-                body = AlertCopy.bodyFor(AlertKind.SECTION_ATK_END, meters, obj.payload),
-                sequenceId = obj.sequenceId,
+                nvdbId = nvdbId,
+                metersAhead = 0.0,
+                title = AlertCopy.titleFor(AlertKind.SECTION_ATK_END, ""),
+                body = AlertCopy.sectionAverageBody(pace?.averageKmh()),
+                sequenceId = match.sequenceId,
                 objectType = RoadObjectType.SECTION_ATK,
-                payload = obj.payload,
             )
         }
-        return null
+        return chosen
     }
 
     private fun pruneFired() {
@@ -616,6 +656,22 @@ class AlertEngine(
     }
 
     private fun fireKey(kind: AlertKind, nvdbId: Long) = "$kind:$nvdbId"
+
+    private class SectionPace {
+        var anchorTimeMs: Long = -1
+        var anchorSequenceId: Long = -1
+        var anchorPosition: Double = 0.0
+        var distanceMeters: Double = 0.0
+        var elapsedMs: Long = 0
+
+        fun averageKmh(): Int? {
+            if (elapsedMs < 1_000L || distanceMeters < 30.0) {
+                return null
+            }
+            val metersPerSecond = distanceMeters / (elapsedMs / 1000.0)
+            return kotlin.math.round(metersPerSecond * 3.6).toInt()
+        }
+    }
 
     companion object {
         /** Alert 206 plates only when this close — entering, not foreshadowing. */

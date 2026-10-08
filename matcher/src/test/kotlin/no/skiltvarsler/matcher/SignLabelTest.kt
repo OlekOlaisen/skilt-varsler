@@ -9,7 +9,10 @@ class SignLabelTest {
         assertThat(SignLabel.displayName("138.1", "Fareskilt")).isEqualTo("Andreaskors")
         assertThat(SignLabel.displayName("150", "Fareskilt")).isEqualTo("Fly")
         assertThat(SignLabel.displayName("144", "Fareskilt")).isEqualTo("Syklende")
-        assertThat(SignLabel.displayName("140", "Fareskilt")).isEqualTo("Gående")
+        assertThat(SignLabel.displayName("140", "Fareskilt")).isEqualTo("Avstand til gangfelt")
+        assertThat(SignLabel.displayName("136.2h", "Fareskilt")).isEqualTo("Avstand til planovergang")
+        assertThat(SignLabel.displayName("112", "Fareskilt")).isEqualTo("Steinsprut")
+        assertThat(SignLabel.displayName("148", "Fareskilt")).isEqualTo("Møtende trafikk")
         assertThat(SignLabel.displayName("100.1", "Fareskilt")).isEqualTo("Farlig sving til høyre")
         assertThat(SignLabel.displayName("156", "Fareskilt")).isEqualTo("Annen fare")
     }

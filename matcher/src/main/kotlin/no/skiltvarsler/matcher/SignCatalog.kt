@@ -31,8 +31,8 @@ object SignCatalog {
         SignOption("wildlife:elg", AlertKind.WILDLIFE, "Elg", "Elg", categoryKey = "wildlife"),
         SignOption("wildlife:hjort", AlertKind.WILDLIFE, "Hjort", "Hjort", categoryKey = "wildlife"),
         SignOption("wildlife:rein", AlertKind.WILDLIFE, "Rein", "Rein", categoryKey = "wildlife"),
-        SignOption("wildlife:storfe", AlertKind.WILDLIFE, "Storfe", "Storfe", categoryKey = "wildlife"),
-        SignOption("wildlife:sau", AlertKind.WILDLIFE, "Sau og hest", "Sau", categoryKey = "wildlife"),
+        SignOption("wildlife:storfe", AlertKind.WILDLIFE, "Ku", "Ku", categoryKey = "wildlife"),
+        SignOption("wildlife:sau", AlertKind.WILDLIFE, "Sau", "Sau", categoryKey = "wildlife"),
     )
 
     val hazards: List<SignOption> = listOf(
@@ -48,13 +48,13 @@ object SignCatalog {
         hazard("108", "Ujevn veg"),
         hazard("109", "Fartshump"),
         hazard("110", "Vegarbeid"),
-        hazard("112", "Løs grus"),
-        hazard("114.1", "Steinsprang"),
-        hazard("114.2", "Steinsprang, motsatt side"),
+        hazard("112", "Steinsprut"),
+        hazard("114.1", "Rasfare, høyre side"),
+        hazard("114.2", "Rasfare, venstre side"),
         hazard("116", "Glatt kjørebane"),
-        hazard("117", "Høy vegkant"),
+        hazard("117", "Farlig vegskulder"),
         hazard("118", "Bevegelig bru"),
-        hazard("120", "Kai eller ferjeleie"),
+        hazard("120", "Kai, strand eller ferjeleie"),
         hazard("122", "Tunnel"),
         hazard("124", "Farlig vegkryss"),
         hazard("126", "Rundkjøring"),
@@ -66,10 +66,10 @@ object SignCatalog {
         hazard("136.3", "Avstand til planovergang (1)"),
         hazard("138.1", "Andreaskors"),
         hazard("138.2", "Andreaskors, flere spor"),
-        hazard("140", "Gående"),
+        hazard("140", "Avstand til gangfelt"),
         hazard("142", "Barn"),
         hazard("144", "Syklende"),
-        hazard("148", "Motgående trafikk"),
+        hazard("148", "Møtende trafikk"),
         hazard("150", "Fly"),
         hazard("152", "Sidevind"),
         hazard("153", "Trafikkulykke"),
@@ -207,9 +207,18 @@ object SignCatalog {
         val trimmed = payload.trim()
         val dotted = Regex("""(\d+)[._](\d+[a-zA-Z]?)""").find(trimmed)
         if (dotted != null) {
-            return "${dotted.groupValues[1]}.${dotted.groupValues[2]}"
+            val major = dotted.groupValues[1]
+            val minor = distanceSignMinor(major, dotted.groupValues[2])
+            return "$major.$minor"
         }
         val major = Regex("""^\d+""").find(trimmed)
         return major?.value ?: trimmed
+    }
+
+    /** NVDB marks which side of the road a 136 distance plate faces with h or v. */
+    private fun distanceSignMinor(major: String, minor: String): String {
+        if (major != "136") return minor
+        val digits = minor.trimEnd('h', 'H', 'v', 'V')
+        return digits.ifEmpty { minor }
     }
 }

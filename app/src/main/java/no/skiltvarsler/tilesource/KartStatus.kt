@@ -6,12 +6,7 @@ import no.skiltvarsler.tiles.RoadGraph
  * Formats loaded NVDB map tiles for the UI: human kommune names, never internal tile ids.
  */
 object KartStatus {
-    fun fromGraph(graph: RoadGraph, fileCount: Int, downloaded: Int = 0): String {
-        val names = kommuneNamesFor(graph)
-        val namePart = formatNames(names)
-        val nye = if (downloaded > 0) ", $downloaded nye" else ""
-        return "$namePart ($fileCount kart$nye)"
-    }
+    fun fromGraph(graph: RoadGraph): String = formatNames(kommuneNamesFor(graph))
 
     fun kommuneNamesFor(graph: RoadGraph): List<String> {
         val fromPolygons = graph.kommunePolygons

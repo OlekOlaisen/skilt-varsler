@@ -42,7 +42,7 @@ The app matches your position to Norway’s official road network and warns you 
 
 ## Download and install
 
-Install the APK from a [Skilt-varsler app release](https://github.com/OlekOlaisen/skilt-varsler/releases/tag/v0.1.20) (`skilt-varsler-*.apk`). Do not use the **NVDB-fliser** release for the app — that one stays marked Latest so phones can download tiles from `releases/latest/download`.
+Install the APK from a [Skilt-varsler app release](https://github.com/OlekOlaisen/skilt-varsler/releases/tag/v0.1.21) (`skilt-varsler-*.apk`). Do not use the **NVDB-fliser** release for the app — that one stays marked Latest so phones can download tiles from `releases/latest/download`.
 
 1. Allow **Install unknown apps** for your browser or file manager.
 2. Open the APK and install.

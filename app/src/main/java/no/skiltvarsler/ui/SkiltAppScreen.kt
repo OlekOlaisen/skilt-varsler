@@ -10,6 +10,7 @@ import androidx.compose.material.icons.outlined.Notifications
 import androidx.compose.material.icons.outlined.Science
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
@@ -62,6 +63,7 @@ fun SkiltAppScreen(
     var tripStatus by remember { mutableStateOf(LastAlertStore.trackingStatus()) }
     var tripActive by remember { mutableStateOf(LastAlertStore.trackingActive) }
     var tileStatus by remember { mutableStateOf(LastAlertStore.tileStatus()) }
+    var tileLoad by remember { mutableStateOf(LastAlertStore.tileLoad()) }
     var lastAlert by remember { mutableStateOf(LastAlertStore.current()) }
     var lastTitle by remember { mutableStateOf(LastAlertStore.current()?.title ?: "Ingen varsel ennå") }
     var lastBody by remember { mutableStateOf(LastAlertStore.current()?.body ?: "Start kjøretur eller test et varsel") }
@@ -90,6 +92,7 @@ fun SkiltAppScreen(
             tripStatus = LastAlertStore.trackingStatus()
             tripActive = LastAlertStore.trackingActive
             tileStatus = LastAlertStore.tileStatus()
+            tileLoad = LastAlertStore.tileLoad()
             LastAlertStore.current()?.let {
                 lastAlert = it
                 lastTitle = it.title
@@ -106,8 +109,9 @@ fun SkiltAppScreen(
 
     Scaffold(
         modifier = Modifier.fillMaxSize(),
+        containerColor = MaterialTheme.colorScheme.background,
         bottomBar = {
-            NavigationBar {
+            NavigationBar(containerColor = MaterialTheme.colorScheme.surface) {
                 NavigationBarItem(
                     selected = selectedTab == AppTab.Home,
                     onClick = { selectedTab = AppTab.Home },
@@ -147,6 +151,7 @@ fun SkiltAppScreen(
                     tripStatus = tripStatus,
                     tripActive = tripActive,
                     tileStatus = tileStatus,
+                    tileLoad = tileLoad,
                     lastTitle = lastTitle,
                     lastBody = lastBody,
                     lastAlert = lastAlert,

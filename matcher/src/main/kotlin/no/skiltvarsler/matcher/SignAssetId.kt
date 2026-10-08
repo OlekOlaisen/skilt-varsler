@@ -10,10 +10,10 @@ package no.skiltvarsler.matcher
 object SignAssetId {
     private val wildlifeByName = mapOf(
         "elg" to "146_1",
-        "hjort" to "146_2",
-        "rådyr" to "146_2",
-        "radyr" to "146_2",
-        "rein" to "146_3",
+        "hjort" to "146_3",
+        "rådyr" to "146_3",
+        "radyr" to "146_3",
+        "rein" to "146_2",
         "storfe" to "146_4",
         "ku" to "146_4",
         "okse" to "146_4",
@@ -50,7 +50,9 @@ object SignAssetId {
 
         val dotted = Regex("""(\d+)\.(\d+[a-zA-Z]?)""").find(trimmed)
         if (dotted != null) {
-            return listOf("${dotted.groupValues[1]}_${dotted.groupValues[2]}")
+            val major = dotted.groupValues[1]
+            val minor = distanceSignMinor(major, dotted.groupValues[2])
+            return listOf("${major}_$minor")
         }
 
         if (Regex("""^\d+[_\-].+""").matches(trimmed)) {
@@ -67,7 +69,7 @@ object SignAssetId {
 
         val embedded = Regex("""(\d+)(?:[._](\d+[a-zA-Z]?))?""").find(trimmed) ?: return emptyList()
         val major = embedded.groupValues[1]
-        val minor = embedded.groupValues[2]
+        val minor = distanceSignMinor(major, embedded.groupValues[2])
         if (minor.isEmpty()) {
             return if (major.length >= 3) {
                 listOf(major, "${major}_0")
@@ -76,6 +78,13 @@ object SignAssetId {
             }
         }
         return listOf("${major}_$minor")
+    }
+
+    /** NVDB marks which side of the road a 136 distance plate faces with h or v. */
+    private fun distanceSignMinor(major: String, minor: String): String {
+        if (major != "136") return minor
+        val digits = minor.trimEnd('h', 'H', 'v', 'V')
+        return digits.ifEmpty { minor }
     }
 
     private fun stemsForKind(kind: AlertKind, payload: String, nvdbId: Long): List<String> {

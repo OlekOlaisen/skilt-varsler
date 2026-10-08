@@ -71,13 +71,11 @@ fun TestScreen(
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         item {
-            Text("Test", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold)
+            Text("Test", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.SemiBold)
         }
         item {
             Text(
-                "Kun for utvikling. Replay og debug-logg brukes til å verifisere matching og varsler før lansering. " +
-                    "Sender ekte varsler på telefonen (og Auto hvis tilkoblet). GPS-replay bruker faste spor " +
-                    "og simulerer tunnel-hold.",
+                "Sender ekte varsler.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.secondary,
             )
@@ -108,9 +106,9 @@ fun TestScreen(
         item {
             Text(
                 if (logging) {
-                    "Logger GPS, match, hold og varsler. Stopp og del teksten etter turen."
+                    "Loggen går. Stopp og del den etter turen."
                 } else {
-                    "Start loggføring før en kjøretur. Del eller kopier loggen til AI."
+                    "Start før en kjøretur, og del loggen etterpå."
                 },
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.secondary,
