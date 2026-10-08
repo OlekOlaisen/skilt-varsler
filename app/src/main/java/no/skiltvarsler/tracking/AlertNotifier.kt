@@ -15,13 +15,9 @@ import androidx.car.app.notification.CarAppExtender
 import androidx.car.app.notification.CarNotificationManager
 import androidx.car.app.notification.CarPendingIntent
 import androidx.core.app.NotificationCompat
-import androidx.core.app.Person
-import androidx.core.app.RemoteInput
 import androidx.core.content.ContextCompat
-import androidx.core.graphics.drawable.IconCompat
 import no.skiltvarsler.MainActivity
 import no.skiltvarsler.R
-import no.skiltvarsler.car.CarMessageActionService
 import no.skiltvarsler.car.SkiltCarAppService
 import no.skiltvarsler.log.DebugLog
 import no.skiltvarsler.matcher.Alert
@@ -37,8 +33,6 @@ object AlertNotifier {
     private const val SIGN_BITMAP_SIZE_PX = 192
     private const val PHONE_CONTENT_REQUEST_CODE = 0
     private const val CAR_CONTENT_REQUEST_CODE = 10
-    private const val REPLY_REQUEST_CODE = 11
-    private const val MARK_AS_READ_REQUEST_CODE = 12
 
     fun ensureChannels(context: Context) {
         val manager = context.getSystemService(NotificationManager::class.java)
@@ -113,6 +107,10 @@ object AlertNotifier {
         )
     }
 
+    /**
+     * Posts a driving-relevant alert via [CarAppExtender] at [NotificationManager.IMPORTANCE_HIGH]
+     * so Android Auto can show a heads-up without MessagingStyle / reply actions.
+     */
     private fun publishAlertContent(
         context: Context,
         displayAlert: Alert,
@@ -129,19 +127,22 @@ object AlertNotifier {
             .setSmallIcon(icon)
             .setContentTitle(titleText)
             .setContentText(subtitleText.ifBlank { null })
-            .setStyle(messagingStyleFor(context, titleText, subtitleText, sign))
+            .setStyle(
+                NotificationCompat.BigTextStyle()
+                    .setBigContentTitle(titleText)
+                    .bigText(subtitleText.ifBlank { titleText }),
+            )
             .setLargeIcon(sign)
             .setCustomContentView(customView)
             .setCustomBigContentView(customView)
             .setCustomHeadsUpContentView(customView)
             .setShowWhen(false)
-            .setCategory(NotificationCompat.CATEGORY_MESSAGE)
+            .setCategory(NotificationCompat.CATEGORY_STATUS)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setDefaults(NotificationCompat.DEFAULT_VIBRATE)
             .setAutoCancel(true)
             .setContentIntent(phoneContentIntent(context))
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
-            .addAction(replyAction(context))
-            .addAction(markAsReadAction(context))
             .extend(carAppExtender(context, titleText, subtitleText, icon, sign))
         try {
             CarNotificationManager.from(context).notify(ALERT_NOTIFICATION_ID, builder)
@@ -187,39 +188,6 @@ object AlertNotifier {
         }
     }
 
-    private fun messagingStyleFor(
-        context: Context,
-        titleText: String,
-        subtitleText: String,
-        sign: Bitmap,
-    ): NotificationCompat.MessagingStyle {
-        val signIcon = IconCompat.createWithBitmap(sign)
-        val driver = Person.Builder()
-            .setName(context.getString(R.string.app_name))
-            .setKey("driver")
-            .build()
-        val hasSubtitle = subtitleText.isNotBlank()
-        val sender = Person.Builder()
-            .setName(if (hasSubtitle) context.getString(R.string.app_name) else titleText)
-            .setKey("skilt-varsler")
-            .setIcon(signIcon)
-            .setImportant(true)
-            .build()
-        val style = NotificationCompat.MessagingStyle(driver)
-            .setGroupConversation(false)
-        if (hasSubtitle) {
-            style.setConversationTitle(titleText)
-        }
-        style.addMessage(
-            NotificationCompat.MessagingStyle.Message(
-                if (hasSubtitle) subtitleText else "\u200B",
-                System.currentTimeMillis(),
-                sender,
-            ),
-        )
-        return style
-    }
-
     private fun carAppExtender(
         context: Context,
         titleText: String,
@@ -229,7 +197,7 @@ object AlertNotifier {
     ): CarAppExtender {
         return CarAppExtender.Builder()
             .setContentTitle(titleText)
-            .setContentText(subtitleText)
+            .setContentText(subtitleText.ifBlank { titleText })
             .setSmallIcon(icon)
             .setLargeIcon(sign)
             .setImportance(NotificationManager.IMPORTANCE_HIGH)
@@ -256,54 +224,6 @@ object AlertNotifier {
             carIntent,
             PendingIntent.FLAG_UPDATE_CURRENT,
         )
-    }
-
-    /**
-     * Android Auto only shows heads-up over other apps for messaging
-     * notifications that include reply and mark-as-read actions.
-     */
-    private fun replyAction(context: Context): NotificationCompat.Action {
-        val replyIntent = Intent(context, CarMessageActionService::class.java).apply {
-            action = CarMessageActionService.ACTION_REPLY
-        }
-        val replyPending = PendingIntent.getService(
-            context,
-            REPLY_REQUEST_CODE,
-            replyIntent,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_MUTABLE,
-        )
-        val replyInput = RemoteInput.Builder(CarMessageActionService.REMOTE_INPUT_RESULT_KEY)
-            .setLabel(context.getString(R.string.car_notification_reply))
-            .build()
-        return NotificationCompat.Action.Builder(
-            R.drawable.ic_alert_camera,
-            context.getString(R.string.car_notification_reply),
-            replyPending,
-        )
-            .setSemanticAction(NotificationCompat.Action.SEMANTIC_ACTION_REPLY)
-            .setShowsUserInterface(false)
-            .addRemoteInput(replyInput)
-            .build()
-    }
-
-    private fun markAsReadAction(context: Context): NotificationCompat.Action {
-        val markIntent = Intent(context, CarMessageActionService::class.java).apply {
-            action = CarMessageActionService.ACTION_MARK_AS_READ
-        }
-        val markPending = PendingIntent.getService(
-            context,
-            MARK_AS_READ_REQUEST_CODE,
-            markIntent,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
-        )
-        return NotificationCompat.Action.Builder(
-            R.drawable.ic_alert_camera,
-            context.getString(R.string.car_notification_mark_as_read),
-            markPending,
-        )
-            .setSemanticAction(NotificationCompat.Action.SEMANTIC_ACTION_MARK_AS_READ)
-            .setShowsUserInterface(false)
-            .build()
     }
 
     fun iconRes(kind: AlertKind): Int = when (kind) {
