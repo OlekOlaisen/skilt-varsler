@@ -6,11 +6,13 @@ import androidx.work.ExistingPeriodicWorkPolicy
 import androidx.work.NetworkType
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
+import no.skiltvarsler.billing.SubscriptionRepository
 import no.skiltvarsler.log.DebugLog
 import no.skiltvarsler.prefetch.TilePrefetchWorker
 import no.skiltvarsler.situations.SituationsHolder
 import no.skiltvarsler.tilesource.GraphHolder
 import no.skiltvarsler.tilesource.KartStatus
+import no.skiltvarsler.tilesource.TileInventory
 import no.skiltvarsler.tracking.AlertNotifier
 import no.skiltvarsler.tracking.LastAlertStore
 import java.io.File
@@ -19,10 +21,14 @@ import java.util.concurrent.TimeUnit
 class SkiltApp : Application() {
     override fun onCreate() {
         super.onCreate()
+        SubscriptionRepository.configure(this)
         AlertNotifier.ensureChannels(this)
         DebugLog.init(this)
-        GraphHolder.loadFromCache(File(filesDir, "tiles"))
+        val tileCacheDir = File(filesDir, "tiles")
+        GraphHolder.loadFromCache(tileCacheDir)
         loadSituations()
+        val activeIds = TileInventory.activeIdsFromGraph()
+        LastAlertStore.setTileInventory(TileInventory.fromCacheDir(tileCacheDir, activeIds))
         if (GraphHolder.isReady()) {
             LastAlertStore.setTileStatus(KartStatus.fromGraph(GraphHolder.current()))
         } else {

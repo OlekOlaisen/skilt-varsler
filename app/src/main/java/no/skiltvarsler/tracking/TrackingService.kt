@@ -299,6 +299,13 @@ class TrackingService : Service() {
             return
         }
         LastAlertStore.setTileStatus(KartStatus.fromGraph(graph))
+        val activeIds = no.skiltvarsler.tilesource.TileInventory.activeIdsFromGraph()
+        val inventory = LastAlertStore.tileInventory()
+        if (inventory.isNotEmpty()) {
+            LastAlertStore.setTileInventory(
+                inventory.map { item -> item.copy(active = item.id in activeIds) },
+            )
+        }
     }
 
     private fun maybePrefetchForLocation() {

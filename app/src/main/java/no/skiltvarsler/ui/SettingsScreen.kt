@@ -8,9 +8,11 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -19,6 +21,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import no.skiltvarsler.billing.SubscriptionState
 import no.skiltvarsler.legal.LegalCopy
 
 @Composable
@@ -29,7 +32,12 @@ fun SettingsScreen(
     onCombineAlertsChange: (Boolean) -> Unit,
     autoStartTracking: Boolean,
     onAutoStartTrackingChange: (Boolean) -> Unit,
+    subscription: SubscriptionState,
+    onOpenPaywall: () -> Unit,
+    onOpenCustomerCenter: () -> Unit,
+    onRestorePurchases: () -> Unit,
     onOpenPrivacyPolicy: () -> Unit,
+    onOpenTest: () -> Unit,
 ) {
     Column(
         modifier = Modifier
@@ -64,6 +72,12 @@ fun SettingsScreen(
                 onCheckedChange = onCombineAlertsChange,
             )
         }
+        SubscriptionCard(
+            subscription = subscription,
+            onOpenPaywall = onOpenPaywall,
+            onOpenCustomerCenter = onOpenCustomerCenter,
+            onRestorePurchases = onRestorePurchases,
+        )
         Text(
             "I Android Auto fester du Skilt-varsler på startsiden.",
             style = MaterialTheme.typography.bodyMedium,
@@ -74,8 +88,75 @@ fun SettingsScreen(
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.secondary,
         )
+        OutlinedButton(
+            onClick = onOpenTest,
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Text("Test")
+        }
         TextButton(onClick = onOpenPrivacyPolicy, modifier = Modifier.fillMaxWidth()) {
             Text("Personvern")
+        }
+    }
+}
+
+@Composable
+private fun SubscriptionCard(
+    subscription: SubscriptionState,
+    onOpenPaywall: () -> Unit,
+    onOpenCustomerCenter: () -> Unit,
+    onRestorePurchases: () -> Unit,
+) {
+    Card(
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Text(
+                "Abonnement",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+            )
+            Text(
+                when {
+                    subscription.isLoading -> "Sjekker abonnement…"
+                    subscription.hasAccess -> "Aktiv tilgang"
+                    else -> "Ingen aktiv tilgang"
+                },
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.secondary,
+            )
+            if (!subscription.lastError.isNullOrBlank()) {
+                Text(
+                    subscription.lastError,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error,
+                )
+            }
+            if (subscription.hasAccess) {
+                Button(
+                    onClick = onOpenCustomerCenter,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text("Administrer abonnement")
+                }
+            } else {
+                Button(
+                    onClick = onOpenPaywall,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text("Abonner")
+                }
+                OutlinedButton(
+                    onClick = onRestorePurchases,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text("Gjenopprett kjøp")
+                }
+            }
         }
     }
 }

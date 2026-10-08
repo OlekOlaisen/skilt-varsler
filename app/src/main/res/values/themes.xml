@@ -1,7 +1,7 @@
 <resources>
     <style name="Theme.SkiltVarsler" parent="android:Theme.Material.NoActionBar">
-        <item name="android:statusBarColor">#FF101418</item>
-        <item name="android:navigationBarColor">#FF101418</item>
-        <item name="android:windowBackground">#FF101418</item>
+        <item name="android:statusBarColor">#FF1A1518</item>
+        <item name="android:navigationBarColor">#FF1A1518</item>
+        <item name="android:windowBackground">#FF1A1518</item>
     </style>
 </resources>

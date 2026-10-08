@@ -8,18 +8,17 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 
-private val Ink = Color(0xFF101418)
-private val Card = Color(0xFF1B222B)
-private val CardHigh = Color(0xFF262F3A)
-private val Amber = Color(0xFFF0B429)
-private val AmberInk = Color(0xFF1C1404)
-private val Cream = Color(0xFFF4F1EA)
-private val Mist = Color(0xFF9AA3AD)
-private val Stop = Color(0xFFE15A4A)
+private val Ink = Color(0xFF1A1518)
+private val Card = Color(0xFF20242A)
+private val CardHigh = Color(0xFF2A3038)
+private val Coral = Color(0xFFF85B60)
+private val Cream = Color(0xFFF5F5F5)
+private val Mist = Color(0xFFA8B0B8)
+private val Stop = Color(0xFFE04850)
 
 private val Colors = darkColorScheme(
-    primary = Amber,
-    onPrimary = AmberInk,
+    primary = Coral,
+    onPrimary = Color.White,
     background = Ink,
     onBackground = Cream,
     surface = Card,
@@ -28,8 +27,8 @@ private val Colors = darkColorScheme(
     onSurfaceVariant = Mist,
     secondary = Mist,
     onSecondary = Ink,
-    secondaryContainer = Color(0xFF3A3118),
-    onSecondaryContainer = Amber,
+    secondaryContainer = Color(0xFF3A2428),
+    onSecondaryContainer = Coral,
     error = Stop,
     onError = Color.White,
 )

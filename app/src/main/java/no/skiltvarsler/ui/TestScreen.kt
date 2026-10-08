@@ -20,9 +20,12 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -47,13 +50,14 @@ private val LogPreviewHeight = 140.dp
 
 @Composable
 fun TestScreen(
+    onClose: () -> Unit,
     onReplayE6: () -> Unit,
     onReplayOsloRing2: () -> Unit,
     onReplayE6Jessheim: () -> Unit,
     onTestSign: (SignOption) -> Unit,
 ) {
     val context = LocalContext.current
-    val items = remember { SignCatalog.all }
+    val signOptions = remember { SignCatalog.all }
     val logging by DebugLog.enabled.collectAsState()
     val logLines by DebugLog.lines.collectAsState()
     val previewLines = remember(logLines) { logLines.takeLast(LOG_PREVIEW_LINE_COUNT) }
@@ -67,107 +71,103 @@ fun TestScreen(
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 16.dp, bottom = 32.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
+        contentPadding = PaddingValues(horizontal = 20.dp, vertical = 20.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         item {
-            Text("Test", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.SemiBold)
-        }
-        item {
+            TextButton(
+                onClick = onClose,
+                contentPadding = PaddingValues(0.dp),
+            ) {
+                Text("Tilbake")
+            }
+            Text(
+                "Test",
+                style = MaterialTheme.typography.headlineMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onBackground,
+            )
             Text(
                 "Sender ekte varsler.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.secondary,
+                modifier = Modifier.padding(top = 4.dp),
             )
         }
+
         item {
-            Button(onClick = onReplayE6, modifier = Modifier.fillMaxWidth()) {
-                Text("Replay E6 fotoboks")
-            }
-        }
-        item {
-            OutlinedButton(onClick = onReplayOsloRing2, modifier = Modifier.fillMaxWidth()) {
-                Text("GPS-replay Oslo Ring 2")
-            }
-        }
-        item {
-            OutlinedButton(onClick = onReplayE6Jessheim, modifier = Modifier.fillMaxWidth()) {
-                Text("GPS-replay E6 Jessheim")
-            }
-        }
-        item {
-            Text(
-                "Tur-logg",
-                style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.SemiBold,
-                modifier = Modifier.padding(top = 8.dp),
-            )
-        }
-        item {
-            Text(
-                if (logging) {
-                    "Loggen går. Stopp og del den etter turen."
-                } else {
-                    "Start før en kjøretur, og del loggen etterpå."
-                },
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.secondary,
-            )
-        }
-        item {
-            Button(
-                onClick = { if (logging) DebugLog.stop() else DebugLog.start() },
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Text(if (logging) "Stopp loggføring" else "Start loggføring")
-            }
-        }
-        item {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                OutlinedButton(
-                    onClick = {
-                        val share = DebugLog.shareIntent(context)
-                        if (share == null) {
-                            Toast.makeText(context, "Loggen er tom", Toast.LENGTH_SHORT).show()
-                        } else {
-                            context.startActivity(share)
-                        }
-                    },
-                    modifier = Modifier.weight(1f),
-                ) {
-                    Text("Del")
+            TestSectionCard(title = "Replay") {
+                Button(onClick = onReplayE6, modifier = Modifier.fillMaxWidth()) {
+                    Text("Replay E6 fotoboks")
                 }
-                OutlinedButton(
-                    onClick = {
-                        val text = DebugLog.copyText()
-                        if (text.isBlank()) {
-                            Toast.makeText(context, "Loggen er tom", Toast.LENGTH_SHORT).show()
-                        } else {
-                            val clipboard = context.getSystemService(ClipboardManager::class.java)
-                            clipboard.setPrimaryClip(ClipData.newPlainText("Skilt-varsler tur-logg", text))
-                            Toast.makeText(context, "Logg kopiert", Toast.LENGTH_SHORT).show()
-                        }
-                    },
-                    modifier = Modifier.weight(1f),
-                ) {
-                    Text("Kopier")
+                OutlinedButton(onClick = onReplayOsloRing2, modifier = Modifier.fillMaxWidth()) {
+                    Text("GPS-replay Oslo Ring 2")
                 }
-                OutlinedButton(
-                    onClick = {
-                        DebugLog.clear()
-                        Toast.makeText(context, "Logg tømt", Toast.LENGTH_SHORT).show()
-                    },
-                    modifier = Modifier.weight(1f),
-                ) {
-                    Text("Tøm")
+                OutlinedButton(onClick = onReplayE6Jessheim, modifier = Modifier.fillMaxWidth()) {
+                    Text("GPS-replay E6 Jessheim")
                 }
             }
         }
+
         item {
-            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            TestSectionCard(title = "Tur-logg") {
+                Text(
+                    if (logging) {
+                        "Loggen går. Stopp og del den etter turen."
+                    } else {
+                        "Start før en kjøretur, og del loggen etterpå."
+                    },
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.secondary,
+                )
+                Button(
+                    onClick = { if (logging) DebugLog.stop() else DebugLog.start() },
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text(if (logging) "Stopp loggføring" else "Start loggføring")
+                }
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    OutlinedButton(
+                        onClick = {
+                            val share = DebugLog.shareIntent(context)
+                            if (share == null) {
+                                Toast.makeText(context, "Loggen er tom", Toast.LENGTH_SHORT).show()
+                            } else {
+                                context.startActivity(share)
+                            }
+                        },
+                        modifier = Modifier.weight(1f),
+                    ) {
+                        Text("Del")
+                    }
+                    OutlinedButton(
+                        onClick = {
+                            val text = DebugLog.copyText()
+                            if (text.isBlank()) {
+                                Toast.makeText(context, "Loggen er tom", Toast.LENGTH_SHORT).show()
+                            } else {
+                                val clipboard = context.getSystemService(ClipboardManager::class.java)
+                                clipboard.setPrimaryClip(ClipData.newPlainText("Skilt-varsler tur-logg", text))
+                                Toast.makeText(context, "Logg kopiert", Toast.LENGTH_SHORT).show()
+                            }
+                        },
+                        modifier = Modifier.weight(1f),
+                    ) {
+                        Text("Kopier")
+                    }
+                    OutlinedButton(
+                        onClick = {
+                            DebugLog.clear()
+                            Toast.makeText(context, "Logg tømt", Toast.LENGTH_SHORT).show()
+                        },
+                        modifier = Modifier.weight(1f),
+                    ) {
+                        Text("Tøm")
+                    }
+                }
                 Text(
                     if (logging) {
                         "Forhåndsvisning (full logg via Del/Kopier)"
@@ -182,7 +182,7 @@ fun TestScreen(
                         .fillMaxWidth()
                         .height(LogPreviewHeight)
                         .clip(RoundedCornerShape(12.dp))
-                        .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f)),
+                        .background(MaterialTheme.colorScheme.surfaceVariant),
                 ) {
                     if (previewLines.isEmpty()) {
                         Text(
@@ -204,6 +204,7 @@ fun TestScreen(
                                     text = line,
                                     maxLines = 2,
                                     overflow = TextOverflow.Ellipsis,
+                                    color = MaterialTheme.colorScheme.onSurface,
                                     style = MaterialTheme.typography.bodySmall.copy(
                                         fontFamily = FontFamily.Monospace,
                                         fontSize = 11.sp,
@@ -216,7 +217,24 @@ fun TestScreen(
                 }
             }
         }
-        items(items, key = { sign -> sign.id }) { sign ->
+
+        item {
+            Text(
+                "Testvarsler",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onBackground,
+                modifier = Modifier.padding(top = 4.dp),
+            )
+            Text(
+                "Trykk for å sende et varsel",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.secondary,
+                modifier = Modifier.padding(top = 2.dp, bottom = 4.dp),
+            )
+        }
+
+        items(signOptions, key = { sign -> sign.id }) { sign ->
             TestAlertRow(
                 label = TestAlerts.labelFor(sign),
                 sign = sign,
@@ -227,30 +245,61 @@ fun TestScreen(
 }
 
 @Composable
+private fun TestSectionCard(
+    title: String,
+    content: @Composable () -> Unit,
+) {
+    Card(
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            Text(
+                title,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+            content()
+        }
+    }
+}
+
+@Composable
 private fun TestAlertRow(
     label: String,
     sign: SignOption,
     onClick: () -> Unit,
 ) {
-    Row(
+    Card(
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick)
-            .padding(vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
+            .clickable(onClick = onClick),
     ) {
-        TrafficSignImage(
-            kind = sign.kind,
-            payload = TestAlerts.payloadFor(sign),
-            nvdbId = sign.nvdbId,
-            size = 48.dp,
-            contentDescription = label,
-        )
-        Text(
-            text = label,
-            style = MaterialTheme.typography.titleMedium,
-            modifier = Modifier.weight(1f),
-        )
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 14.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            TrafficSignImage(
+                kind = sign.kind,
+                payload = TestAlerts.payloadFor(sign),
+                nvdbId = sign.nvdbId,
+                size = 48.dp,
+                contentDescription = label,
+            )
+            Text(
+                text = label,
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.weight(1f),
+            )
+        }
     }
 }

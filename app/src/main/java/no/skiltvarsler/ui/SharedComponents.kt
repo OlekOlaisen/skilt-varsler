@@ -1,5 +1,6 @@
 package no.skiltvarsler.ui
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -8,6 +9,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.LinearProgressIndicator
@@ -17,11 +19,22 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import no.skiltvarsler.matcher.Alert
 import no.skiltvarsler.matcher.AlertKind
+import no.skiltvarsler.tilesource.TileCacheTag
+import no.skiltvarsler.tilesource.TileInventoryItem
+
+private val TileActiveGreen = Color(0xFF3DDC84)
+private val TileUpdatedOrange = Color(0xFFFF9F1A)
+private val TileUpdatedOrangeInk = Color(0xFF1C1204)
+private val TileNewCoral = Color(0xFFF85B60)
+private val TileCachedGrey = Color(0xFF6B7380)
+private val TileCachedGreyBg = Color(0xFF2A3038)
 
 @Composable
 fun LoadBar(
@@ -61,6 +74,87 @@ fun LoadBar(
             )
         }
     }
+}
+
+@Composable
+fun TileInventoryCard(
+    tiles: List<TileInventoryItem>,
+) {
+    Card(
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Text(
+                "Kart",
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.SemiBold,
+            )
+            if (tiles.isEmpty()) {
+                Text(
+                    "Ingen fliser på telefonen ennå",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.secondary,
+                )
+            } else {
+                tiles.forEach { tile ->
+                    TileInventoryRow(tile)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun TileInventoryRow(tile: TileInventoryItem) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                tile.name,
+                style = MaterialTheme.typography.bodyLarge,
+            )
+            if (tile.active) {
+                Text(
+                    "Aktiv nå",
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.SemiBold,
+                    color = TileActiveGreen,
+                )
+            }
+        }
+        TileTagChip(tag = tile.tag)
+    }
+}
+
+@Composable
+private fun TileTagChip(tag: TileCacheTag) {
+    val background = when (tag) {
+        TileCacheTag.NEW -> TileNewCoral
+        TileCacheTag.UPDATED -> TileUpdatedOrange
+        TileCacheTag.CACHED -> TileCachedGreyBg
+    }
+    val foreground = when (tag) {
+        TileCacheTag.NEW -> Color.White
+        TileCacheTag.UPDATED -> TileUpdatedOrangeInk
+        TileCacheTag.CACHED -> TileCachedGrey
+    }
+    Text(
+        text = tag.label,
+        style = MaterialTheme.typography.labelMedium,
+        fontWeight = FontWeight.SemiBold,
+        color = foreground,
+        modifier = Modifier
+            .clip(RoundedCornerShape(999.dp))
+            .background(background)
+            .padding(horizontal = 10.dp, vertical = 4.dp),
+    )
 }
 
 @Composable

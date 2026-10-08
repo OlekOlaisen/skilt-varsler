@@ -19,13 +19,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import no.skiltvarsler.matcher.Alert
+import no.skiltvarsler.tilesource.TileInventoryItem
 import no.skiltvarsler.tracking.TileLoadProgress
 
 @Composable
 fun HomeScreen(
     tripStatus: String,
     tripActive: Boolean,
-    tileStatus: String,
+    tileInventory: List<TileInventoryItem>,
     tileLoad: TileLoadProgress?,
     lastTitle: String,
     lastBody: String,
@@ -77,7 +78,7 @@ fun HomeScreen(
         }
         StatusCard(title = "Kjøretur", value = tripStatus)
         StatusCard(title = "Siste varsel", value = lastTitle, subtitle = lastBody, alert = lastAlert)
-        StatusCard(title = "Kart", value = tileStatus)
+        TileInventoryCard(tiles = tileInventory)
     }
 }
 

@@ -13,6 +13,8 @@ import no.skiltvarsler.situations.SituationsDownloader
 import no.skiltvarsler.tilesource.AndroidTileLoader
 import no.skiltvarsler.tilesource.GraphHolder
 import no.skiltvarsler.tilesource.KartStatus
+import no.skiltvarsler.tilesource.TileCacheTag
+import no.skiltvarsler.tilesource.TileInventory
 import no.skiltvarsler.tracking.LastAlertStore
 import org.json.JSONObject
 import java.io.File
@@ -49,12 +51,17 @@ class TilePrefetchWorker(
                 .select(allTiles, latitude, longitude, LastAlertStore.bearingDegrees)
                 .filterNot { ahead -> windowTiles.any { it.id == ahead.id } }
             val localVersions = readLocalVersions(localManifest)
-            val pending = (windowTiles + aheadTiles).count { tile ->
-                needsDownload(tile, cacheDir, localVersions)
+            val relevantTiles = (windowTiles + aheadTiles).distinctBy { tile -> tile.id }
+            val plannedTags = relevantTiles.associate { tile ->
+                tile.id to TileInventory.classify(tile, cacheDir, localVersions)
+            }
+            val pending = relevantTiles.count { tile ->
+                plannedTags[tile.id] != TileCacheTag.CACHED
             }
             val totalSteps = pending + 1
             var completed = 0
             LastAlertStore.setTileLoad(0, totalSteps, "Henter kart")
+            publishInventory(cacheDir, relevantTiles, plannedTags, windowTiles.map { it.id }.toSet())
             var downloaded = download(windowTiles, cacheDir, base, localVersions) { label ->
                 completed += 1
                 LastAlertStore.setTileLoad(completed, totalSteps, label)
@@ -66,6 +73,7 @@ class TilePrefetchWorker(
             if (files.isEmpty()) {
                 GraphHolder.clear()
                 LastAlertStore.setTileStatus(statusText(allTiles, files, latitude, longitude))
+                publishInventory(cacheDir, relevantTiles, plannedTags, emptySet())
                 return@withContext Result.success()
             }
             if (downloaded > 0 || !GraphHolder.covers(files)) {
@@ -86,6 +94,12 @@ class TilePrefetchWorker(
             completed += 1
             LastAlertStore.setTileLoad(completed.coerceAtMost(totalSteps), totalSteps, "Henter trafikkmeldinger")
             LastAlertStore.setTileStatus(statusText(allTiles, files, latitude, longitude))
+            publishInventory(
+                cacheDir,
+                relevantTiles,
+                plannedTags,
+                TileInventory.activeIdsFromGraph(),
+            )
             Result.success()
         } catch (error: OutOfMemoryError) {
             GraphHolder.clear()
@@ -137,6 +151,26 @@ class TilePrefetchWorker(
             onFile(label)
         }
         return downloaded
+    }
+
+    private fun publishInventory(
+        cacheDir: File,
+        tiles: List<ManifestTile>,
+        tagsById: Map<String, TileCacheTag>,
+        activeIds: Set<String>,
+    ) {
+        val relevant = tiles.map { tile ->
+            TileInventory.itemFor(
+                tile = tile,
+                tag = tagsById[tile.id] ?: TileCacheTag.CACHED,
+                activeIds = activeIds,
+            )
+        }
+        val relevantIds = relevant.map { item -> item.id }.toSet()
+        val extras = TileInventory.fromCacheDir(cacheDir, activeIds)
+            .filter { item -> item.id !in relevantIds }
+            .map { item -> item.copy(tag = TileCacheTag.CACHED, active = false) }
+        LastAlertStore.setTileInventory(relevant + extras)
     }
 
     private fun statusText(

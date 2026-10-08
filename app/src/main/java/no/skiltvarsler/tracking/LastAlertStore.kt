@@ -4,6 +4,7 @@ import no.skiltvarsler.log.DebugLog
 import no.skiltvarsler.matcher.Alert
 import no.skiltvarsler.matcher.AlertCopy
 import no.skiltvarsler.matcher.AlertKind
+import no.skiltvarsler.tilesource.TileInventoryItem
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicReference
@@ -47,6 +48,7 @@ object LastAlertStore {
     private val tracking = AtomicReference("Klar")
     private val tile = AtomicReference("Ikke lastet ennå")
     private val tileLoad = AtomicReference<TileLoadProgress?>(null)
+    private val tileInventory = AtomicReference<List<TileInventoryItem>>(emptyList())
     private val upcoming = AtomicReference<List<UpcomingSign>>(emptyList())
     private val muted = AtomicBoolean(false)
     private val listeners = CopyOnWriteArrayList<() -> Unit>()
@@ -143,6 +145,13 @@ object LastAlertStore {
         if (tileLoad.getAndSet(null) != null) {
             notifyListeners()
         }
+    }
+
+    fun tileInventory(): List<TileInventoryItem> = tileInventory.get()
+
+    fun setTileInventory(items: List<TileInventoryItem>) {
+        tileInventory.set(items)
+        notifyListeners()
     }
 
     private fun notifyListeners() {

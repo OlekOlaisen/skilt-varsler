@@ -23,8 +23,8 @@ android {
         applicationId = "no.skiltvarsler"
         minSdk = 29
         targetSdk = 35
-        versionCode = 22
-        versionName = "0.1.21"
+        versionCode = 23
+        versionName = "0.1.22"
         val tileBaseUrl = (project.findProperty("tileBaseUrl") as String?)
             ?: "https://github.com/OlekOlaisen/skilt-varsler/releases/latest/download"
         buildConfigField("String", "TILE_BASE_URL", "\"$tileBaseUrl\"")
@@ -33,6 +33,11 @@ android {
             "PRIVACY_POLICY_URL",
             "\"https://github.com/OlekOlaisen/skilt-varsler/blob/main/docs/privacy-policy.md\"",
         )
+        // Override release with -PrevenueCatApiKey=goog_… before Play upload.
+        // A test_ key must never ship in a Play store build.
+        val revenueCatApiKey = (project.findProperty("revenueCatApiKey") as String?)
+            ?: "test_sYGPTYlfHUQcBegZvWkQastMrmF"
+        buildConfigField("String", "REVENUECAT_API_KEY", "\"$revenueCatApiKey\"")
     }
 
     signingConfigs {
@@ -106,5 +111,7 @@ dependencies {
     implementation(libs.androidx.car.app)
     implementation(libs.androidx.car.app.projected)
     implementation(libs.androidsvg)
+    implementation(libs.revenuecat.purchases)
+    implementation(libs.revenuecat.purchases.ui)
     debugImplementation(libs.androidx.compose.ui.tooling)
 }
