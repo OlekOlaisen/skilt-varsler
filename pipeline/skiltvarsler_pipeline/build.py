@@ -10,6 +10,7 @@ from .model import KommunePolygon, RoadObject, TileGraph
 from .nvdb import NvdbClient
 from .objects import (
     collect_tunnels,
+    dedupe_paired_speed_plates,
     enrich_tunnel_signs,
     ingest_fartsgrense,
     ingest_skiltplate,
@@ -105,6 +106,7 @@ def build_kommune(
             else:
                 ingest_typed(graph, type_id, objects)
         prefer_skiltplate_over_regulering_for_stop_yield(graph)
+        dedupe_paired_speed_plates(graph)
         enrich_tunnel_signs(graph, tunnels)
         attach_kommune_polygon(graph, client, kommune)
     sanitize(graph)

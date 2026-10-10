@@ -5,6 +5,8 @@ from skiltvarsler_pipeline.objects import (
     classify_regulering,
     classify_sign,
     collect_tunnels,
+    dedupe_paired_speed_plates,
+    direction_from_ansiktsside,
     encode_payload,
     enrich_tunnel_signs,
     ingest_skiltplate,
@@ -196,3 +198,82 @@ def test_tunnel_sign_gets_name_and_length():
 def test_encode_payload_drops_trailing_empties():
     assert encode_payload("775", "Moss") == "775|Moss"
     assert encode_payload("134") == "134"
+
+
+def test_direction_from_ansiktsside():
+    assert direction_from_ansiktsside("Trafikk mot metreringsretning") == "MOT"
+    assert direction_from_ansiktsside("Trafikk i metreringsretning") == "MED"
+    assert direction_from_ansiktsside("") is None
+    assert direction_from_ansiktsside(None) is None
+
+
+def test_speed_limit_uses_ansiktsside_over_stedfesting_retning():
+    graph = graph_with_sequence()
+    ingest_skiltplate(
+        graph,
+        [
+            nvdb_object(
+                1014926783,
+                {
+                    "Skiltnummer": "362.40 - Fartsgrense 40 km/t",
+                    "Ansiktsside, rettet mot": "Trafikk i metreringsretning",
+                },
+                direction="MOT",
+                from_pos=0.30,
+            ),
+            nvdb_object(
+                1014925851,
+                {
+                    "Skiltnummer": "362.40 - Fartsgrense 40 km/t",
+                    "Ansiktsside, rettet mot": "Trafikk mot metreringsretning",
+                },
+                direction="MOT",
+                from_pos=0.35,
+            ),
+        ],
+    )
+    by_id = {obj.nvdb_id: obj for obj in graph.objects}
+    assert by_id[1014926783].direction == "MED"
+    assert by_id[1014925851].direction == "MOT"
+
+
+def test_dedupe_paired_speed_plates_keeps_one_per_zone():
+    graph = graph_with_sequence(400.0)
+    ingest_skiltplate(
+        graph,
+        [
+            nvdb_object(
+                1014927192,
+                {
+                    "Skiltnummer": "362.40",
+                    "Ansiktsside, rettet mot": "Trafikk i metreringsretning",
+                },
+                direction="MOT",
+                from_pos=0.020,
+            ),
+            nvdb_object(
+                1014925525,
+                {
+                    "Skiltnummer": "362.40",
+                    "Ansiktsside, rettet mot": "Trafikk i metreringsretning",
+                },
+                direction="MOT",
+                from_pos=0.022,
+            ),
+            nvdb_object(
+                1014925851,
+                {
+                    "Skiltnummer": "362.40",
+                    "Ansiktsside, rettet mot": "Trafikk mot metreringsretning",
+                },
+                direction="MOT",
+                from_pos=0.35,
+            ),
+        ],
+    )
+    dedupe_paired_speed_plates(graph)
+    med_plates = [obj for obj in graph.objects if obj.direction == "MED"]
+    mot_plates = [obj for obj in graph.objects if obj.direction == "MOT"]
+    assert len(med_plates) == 1
+    assert med_plates[0].nvdb_id == 1014927192
+    assert [obj.nvdb_id for obj in mot_plates] == [1014925851]

@@ -32,9 +32,11 @@ data class TileCoverage(
 }
 
 object TileSelector {
-    const val NEIGHBOR_PAD_DEGREES = 0.18
-    const val DEFAULT_LOOKAHEAD_KM = 40.0
-    const val DEFAULT_WINDOW_PAD_METERS = 5_000.0
+    /** ~6–7 km — enough for a border kommune, not half of Viken. */
+    const val NEIGHBOR_PAD_DEGREES = 0.06
+    const val DEFAULT_LOOKAHEAD_KM = 15.0
+    const val DEFAULT_WINDOW_PAD_METERS = 1_500.0
+    const val MAX_NEIGHBOR_TILES = 4
 
     fun select(
         tiles: List<TileCoverage>,
@@ -46,21 +48,38 @@ object TileSelector {
         if (latitude == null || longitude == null || tiles.isEmpty()) {
             return emptyList()
         }
-        val here = tiles.filter { it.contains(latitude, longitude) }
-        val neighbors = tiles.filter { tile ->
-            here.any { current -> boxesOverlap(current.expanded(NEIGHBOR_PAD_DEGREES), tile) } ||
-                tile.contains(latitude, longitude)
+        val here = tiles.filter { tile -> tile.contains(latitude, longitude) }
+        val neighborCandidates = tiles.filter { tile ->
+            here.any { current -> boxesOverlap(current.expanded(NEIGHBOR_PAD_DEGREES), tile) }
         }
+        val hereIds = here.map { tile -> tile.id }.toSet()
+        val neighbors = neighborCandidates
+            .filter { tile -> tile.id !in hereIds }
+            .sortedBy { tile -> distanceMetersToTile(latitude, longitude, tile) }
+            .take(MAX_NEIGHBOR_TILES)
         val ahead = if (bearingDegrees == null) {
             emptyList()
         } else {
             val origin = LatLon(latitude, longitude)
-            val samples = listOf(10.0, 25.0, lookaheadKm).map { km ->
+            val sampleKm = listOf(
+                min(5.0, lookaheadKm),
+                min(10.0, lookaheadKm),
+                lookaheadKm,
+            ).distinct()
+            val samples = sampleKm.map { km ->
                 Geo.destination(origin, bearingDegrees, km * 1000.0)
             }
-            tiles.filter { tile -> samples.any { tile.contains(it.latitude, it.longitude) } }
+            tiles.filter { tile ->
+                samples.any { sample -> tile.contains(sample.latitude, sample.longitude) }
+            }
         }
-        return (here + neighbors + ahead).distinctBy { it.id }
+        return (here + neighbors + ahead).distinctBy { tile -> tile.id }
+    }
+
+    private fun distanceMetersToTile(latitude: Double, longitude: Double, tile: TileCoverage): Double {
+        val centerLat = (tile.minLat + tile.maxLat) / 2.0
+        val centerLon = (tile.minLon + tile.maxLon) / 2.0
+        return Geo.distanceMeters(LatLon(latitude, longitude), LatLon(centerLat, centerLon))
     }
 
     fun containing(

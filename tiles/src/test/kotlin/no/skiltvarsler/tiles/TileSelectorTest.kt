@@ -55,7 +55,7 @@ class TileSelectorTest {
 
     @Test
     fun lookaheadAddsKommuneAlongBearing() {
-        val west = tile("kommune-west", minLon = 10.20, minLat = 59.50, maxLon = 10.40, maxLat = 59.70)
+        val west = tile("kommune-west", minLon = 10.45, minLat = 59.50, maxLon = 10.65, maxLat = 59.70)
         val chosen = TileSelector.select(
             tiles = listOf(vestby, west, bergen),
             latitude = 59.58,

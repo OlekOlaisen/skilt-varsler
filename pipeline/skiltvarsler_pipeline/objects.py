@@ -108,6 +108,26 @@ def direction_of(sted: dict[str, Any]) -> str:
     return "BOTH"
 
 
+def direction_from_ansiktsside(value: Any) -> str | None:
+    """Map NVDB Ansiktsside to travel direction the plate faces.
+
+    Stedfesting.retning is often wrong for 362 plates (both sides tagged MOT).
+    Ansiktsside is the reliable "who sees this face" signal.
+    """
+    text = str(value or "").lower().strip()
+    if not text:
+        return None
+    if "mot metreringsretning" in text:
+        return "MOT"
+    if "i metreringsretning" in text:
+        return "MED"
+    return None
+
+
+# Left/right plates at the same meter are separate NVDB objects; keep one per zone.
+SPEED_PLATE_PAIR_METERS = 15.0
+
+
 def positions(sted: dict[str, Any]) -> tuple[float, float] | None:
     sted_type = (sted.get("type") or "").lower()
     if "relativPosisjon" in sted or sted_type == "punkt":
@@ -269,6 +289,11 @@ def ingest_skiltplate(graph: TileGraph, objects: Iterable[dict[str, Any]], today
         if payload == "110" and is_expired(obj, today):
             continue
         nvdb_id = int(obj["id"])
+        ansikt_direction = None
+        if mapped == "SPEED_LIMIT":
+            ansikt_direction = direction_from_ansiktsside(
+                egenskap(obj, "Ansiktsside, rettet mot", "Ansiktsside"),
+            )
         for sted in stedfestinger(obj):
             sequence_id = sted.get("veglenkesekvensid") or sted.get("veglenkeid")
             span = positions(sted)
@@ -279,6 +304,7 @@ def ingest_skiltplate(graph: TileGraph, objects: Iterable[dict[str, Any]], today
                 graph.warnings += 1
                 continue
             from_pos, to_pos = span
+            direction = ansikt_direction if ansikt_direction is not None else direction_of(sted)
             graph.objects.append(
                 RoadObject(
                     nvdb_id=nvdb_id,
@@ -286,10 +312,42 @@ def ingest_skiltplate(graph: TileGraph, objects: Iterable[dict[str, Any]], today
                     sequence_id=int(sequence_id),
                     from_pos=from_pos,
                     to_pos=to_pos,
-                    direction=direction_of(sted),
+                    direction=direction,
                     payload=payload,
                 )
             )
+
+
+def dedupe_paired_speed_plates(graph: TileGraph) -> None:
+    """Keep one SPEED_LIMIT when NVDB has left+right plates at the same meter."""
+    speed_plates = [obj for obj in graph.objects if obj.type == "SPEED_LIMIT"]
+    if len(speed_plates) < 2:
+        return
+    others = [obj for obj in graph.objects if obj.type != "SPEED_LIMIT"]
+    grouped: dict[tuple[int, str, str], list[RoadObject]] = {}
+    for plate in speed_plates:
+        key = (plate.sequence_id, plate.direction, plate.payload)
+        grouped.setdefault(key, []).append(plate)
+    kept: list[RoadObject] = []
+    for (sequence_id, _direction, _payload), group in grouped.items():
+        group.sort(key=lambda plate: (plate.from_pos, plate.nvdb_id))
+        sequence_length = graph.sequence_lengths.get(sequence_id, 0.0)
+        selected: list[RoadObject] = []
+        for plate in group:
+            is_pair = False
+            for previous in selected:
+                position_delta = abs(plate.from_pos - previous.from_pos)
+                if sequence_length > 0.0:
+                    meters_apart = position_delta * sequence_length
+                else:
+                    meters_apart = position_delta * 1000.0
+                if meters_apart <= SPEED_PLATE_PAIR_METERS:
+                    is_pair = True
+                    break
+            if not is_pair:
+                selected.append(plate)
+        kept.extend(selected)
+    graph.objects = others + kept
 
 
 def collect_tunnels(graph: TileGraph, objects: Iterable[dict[str, Any]]) -> list[RoadObject]:

@@ -339,9 +339,10 @@ class AlertEngine(
 
     /**
      * Speed limits alert when the matched limit changes (enter), or when turning onto
-     * another road that still has the same number. With [AlertSettings.repeatReminderSigns],
-     * continuing onto a new sequence with the same number also reconfirms. Never foreshadow
-     * an upcoming zone.
+     * another road that still has the same number. Same-number reminders while continuing
+     * straight are only from physical 362 plates via [collectSpeedAtPlate] when
+     * [AlertSettings.repeatReminderSigns] is on — never from a bare sequence change.
+     * Never foreshadow an upcoming zone.
      *
      * Near a 362 plate, the plate km/t wins over NVDB fartsdata so a wrong stretch value
      * cannot flap against the sign you are passing.
@@ -369,7 +370,6 @@ class AlertEngine(
         }
         // Turning onto a different road: confirm the limit even when the number is unchanged,
         // including when the road we left had no NVDB speed at all.
-        // With repeatReminderSigns, also reconfirm when continuing onto a new sequence.
         if (previousSequenceId != null &&
             previousDirection != null &&
             previousPosition != null &&
@@ -381,7 +381,7 @@ class AlertEngine(
                 previousPosition,
                 match,
             )
-            if (turnedOntoNewRoad || settings.repeatReminderSigns) {
+            if (turnedOntoNewRoad) {
                 return speedAlert(match, currentKmh, 0.0, match.position)
             }
         }

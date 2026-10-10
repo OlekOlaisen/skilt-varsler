@@ -469,7 +469,7 @@ class DrivingBehaviorTest {
     }
 
     @Test
-    fun slowCreepOntoNewSequenceStillReconfirmsWhenDrivingResumesWithRepeat() {
+    fun slowCreepOntoNewSequenceDoesNotReconfirmWithoutPlateEvenWithRepeat() {
         val graph = SyntheticGraph.mainRoadWithSideStreet()
         val main = graph.sequences.getValue(SyntheticGraph.SEQ_MAIN).links.first()
         val continueLink = graph.sequences.getValue(SyntheticGraph.SEQ_CONTINUE).links.first()
@@ -490,8 +490,7 @@ class DrivingBehaviorTest {
         val result = Replay.play(engine, alongMain + crawlContinue + driveContinue)
         val limitsOnContinue = result.alertsOf(AlertKind.SPEED_LIMIT)
             .filter { alert -> alert.sequenceId == SyntheticGraph.SEQ_CONTINUE }
-        assertThat(limitsOnContinue).isNotEmpty()
-        assertThat(limitsOnContinue.first().payload).isEqualTo("40")
+        assertThat(limitsOnContinue).isEmpty()
     }
 
     @Test
@@ -538,7 +537,7 @@ class DrivingBehaviorTest {
     }
 
     @Test
-    fun continuingStraightThroughJunctionReconfirmsSameSpeedWhenRepeatReminderSignsEnabled() {
+    fun continuingStraightThroughJunctionDoesNotReconfirmSameSpeedEvenWhenRepeatReminderSignsEnabled() {
         val graph = SyntheticGraph.mainRoadWithSideStreet()
         val main = graph.sequences.getValue(SyntheticGraph.SEQ_MAIN).links.first()
         val continueLink = graph.sequences.getValue(SyntheticGraph.SEQ_CONTINUE).links.first()
@@ -553,9 +552,28 @@ class DrivingBehaviorTest {
         val result = Replay.play(engine, alongMain + alongContinue)
         val limitsOnContinue = result.alertsOf(AlertKind.SPEED_LIMIT)
             .filter { it.sequenceId == SyntheticGraph.SEQ_CONTINUE }
-        assertThat(limitsOnContinue).isNotEmpty()
-        assertThat(limitsOnContinue.first().payload).isEqualTo("40")
-        assertThat(limitsOnContinue.first().metersAhead).isEqualTo(0.0)
+        assertThat(limitsOnContinue).isEmpty()
+    }
+
+    @Test
+    fun continuingStraightReconfirmsSameSpeedAtPlateWhenRepeatReminderSignsEnabled() {
+        val graph = SyntheticGraph.mainRoadWithContinueSpeedPlate()
+        val main = graph.sequences.getValue(SyntheticGraph.SEQ_MAIN).links.first()
+        val continueLink = graph.sequences.getValue(SyntheticGraph.SEQ_CONTINUE).links.first()
+        val alongMain = Replay.alongLink(main, TravelDirection.MED, speedMetersPerSecond = 12.0)
+        val alongContinue = Replay.alongLink(
+            continueLink,
+            TravelDirection.MED,
+            speedMetersPerSecond = 12.0,
+            startTimeMs = alongMain.last().timeMs + 1_000L,
+        )
+        val engine = AlertEngine(graph, AlertSettings(repeatReminderSigns = true))
+        val result = Replay.play(engine, alongMain + alongContinue)
+        val plateAlerts = result.alertsOf(AlertKind.SPEED_LIMIT)
+            .filter { alert -> alert.nvdbId == SyntheticGraph.CONTINUE_SPEED_PLATE_40_ID }
+        assertThat(plateAlerts).isNotEmpty()
+        assertThat(plateAlerts.first().payload).isEqualTo("40")
+        assertThat(plateAlerts.first().metersAhead).isAtMost(AlertEngine.SPEED_AT_PLATE_METERS)
     }
 
     @Test

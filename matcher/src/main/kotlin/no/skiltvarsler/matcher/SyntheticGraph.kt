@@ -164,11 +164,22 @@ object SyntheticGraph {
     const val SIDE_YIELD_ID = 910007L
     const val SEQ_SPEED_PLATE = 420L
     const val SPEED_PLATE_40_ID = 910040L
+    const val CONTINUE_SPEED_PLATE_40_ID = 910041L
     const val SPEED_PLATE_POS = 0.55
+    const val CONTINUE_SPEED_PLATE_POS = 0.20
     const val ANGLED_SIDE_DEGREES = 30.0
 
     fun mainRoadWithSideStreet(): RoadGraph {
         return junctionGraph(sideBearingDegrees = 90.0, includeJunctionControl = false)
+    }
+
+    /** Same junction as [mainRoadWithSideStreet], plus a repeated 40 plate on the continue link. */
+    fun mainRoadWithContinueSpeedPlate(): RoadGraph {
+        return junctionGraph(
+            sideBearingDegrees = 90.0,
+            includeJunctionControl = false,
+            continueSpeedPlate = true,
+        )
     }
 
     /**
@@ -406,6 +417,7 @@ object SyntheticGraph {
         continuePriorityPlate: Boolean = true,
         continuePriorityStretch: Boolean = false,
         sideHasSpeed: Boolean = true,
+        continueSpeedPlate: Boolean = false,
     ): RoadGraph {
         val junction = Geo.offsetMeters(origin, northMeters = MAIN_LENGTH_METERS, eastMeters = 0.0)
         val northEnd = Geo.offsetMeters(junction, northMeters = MAIN_LENGTH_METERS, eastMeters = 0.0)
@@ -578,6 +590,19 @@ object SyntheticGraph {
         builder.addSpeed(SpeedInterval(SEQ_CONTINUE, 0.0, 1.0, 40, TravelDirection.MED))
         if (sideHasSpeed) {
             builder.addSpeed(SpeedInterval(SEQ_SIDE, 0.0, 1.0, 40, TravelDirection.MED))
+        }
+        if (continueSpeedPlate) {
+            builder.addObject(
+                RoadObject(
+                    nvdbId = CONTINUE_SPEED_PLATE_40_ID,
+                    type = RoadObjectType.SPEED_LIMIT,
+                    sequenceId = SEQ_CONTINUE,
+                    fromPos = CONTINUE_SPEED_PLATE_POS,
+                    toPos = CONTINUE_SPEED_PLATE_POS,
+                    direction = TravelDirection.MED,
+                    payload = "40",
+                ),
+            )
         }
         return builder.build()
     }
