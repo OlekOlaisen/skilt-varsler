@@ -17,8 +17,15 @@ class AlertEngine(
     private val fired = LinkedHashSet<String>()
     private val priorityStay = PriorityRoadStayTracker()
     private var lastSpeedKmh: Int? = null
-    private var lastSpeedSequenceId: Long? = null
-    private var lastSpeedDirection: TravelDirection? = null
+    /** Last speed limit that produced a heads-up — used so 362 plates can still confirm. */
+    private var lastAnnouncedSpeedKmh: Int? = null
+    /**
+     * Last sequence we drove on while alerting — updated even when NVDB has no speed there,
+     * so turning from an unsigned side street onto a signed road can still reconfirm.
+     */
+    private var lastDrivingSequenceId: Long? = null
+    private var lastDrivingDirection: TravelDirection? = null
+    private var lastDrivingPosition: Double? = null
     private var lastKommune: Int? = null
     private var lastInsideWildlife = HashSet<Long>()
     private var lastInsideSectionAtk = HashSet<Long>()
@@ -27,8 +34,13 @@ class AlertEngine(
     private var lastInsidePriority = HashSet<Long>()
     private var lastMatchSequenceId: Long? = null
     private var lastMatchDirection: TravelDirection? = null
+    private var lastMatchPosition: Double? = null
     private var lastHorizon: List<HorizonCandidate> = emptyList()
     private var situations: List<TrafficSituation> = emptyList()
+    private var emittedSpeedKmhThisUpdate: Int? = null
+    /** After passing a 362 plate, keep its km/t until the matched sequence changes. */
+    private var plateAnchoredKmh: Int? = null
+    private var plateAnchoredSequenceId: Long? = null
 
     fun updateSettings(next: AlertSettings) {
         settings = next
@@ -53,8 +65,10 @@ class AlertEngine(
         fired.clear()
         priorityStay.reset()
         lastSpeedKmh = null
-        lastSpeedSequenceId = null
-        lastSpeedDirection = null
+        lastAnnouncedSpeedKmh = null
+        lastDrivingSequenceId = null
+        lastDrivingDirection = null
+        lastDrivingPosition = null
         lastKommune = null
         lastInsideWildlife.clear()
         lastInsideSectionAtk.clear()
@@ -63,7 +77,11 @@ class AlertEngine(
         lastInsidePriority.clear()
         lastMatchSequenceId = null
         lastMatchDirection = null
+        lastMatchPosition = null
         lastHorizon = emptyList()
+        emittedSpeedKmhThisUpdate = null
+        plateAnchoredKmh = null
+        plateAnchoredSequenceId = null
     }
 
     fun currentMatch(): Match? = matcher.current()
@@ -92,6 +110,7 @@ class AlertEngine(
         refreshHorizon(match, fix.speedMetersPerSecond)
         refreshPriorityStay(match, speed, fix.timeMs)
         val alerts = ArrayList<Alert>()
+        emittedSpeedKmhThisUpdate = null
 
         collectSpeedLimit(match, alerting)?.let { alerts.add(it) }
         collectKommune(match, alerting)?.let { alerts.add(it) }
@@ -128,12 +147,17 @@ class AlertEngine(
         maybeAllowPriorityAlertAfterTurn(match)
         collectPriorityEnter(match, alerting)?.let { alerts.add(it) }
         collectPriorityAtPlate(match, alerting)?.let { alerts.add(it) }
+        collectSpeedAtPlate(match, alerting)?.let { alerts.add(it) }
 
         for (candidate in lastHorizon) {
             val kind = candidate.obj.type.toAlertKind() ?: continue
             if (kind == AlertKind.WILDLIFE || kind == AlertKind.SECTION_ATK_START) continue
             // Entrance/reminder 206 plates are handled by collectPriority*; only 208 ends stay on horizon.
             if (kind == AlertKind.PRIORITY_ROAD && !AlertCopy.isPriorityEnd(candidate.obj.payload)) {
+                continue
+            }
+            // 362 plates alert at the plate via collectSpeedAtPlate — never as long-range foreshadow.
+            if (kind == AlertKind.SPEED_LIMIT) {
                 continue
             }
             if (!settings.enabled(kind, candidate.obj.payload)) continue
@@ -319,46 +343,75 @@ class AlertEngine(
      * continuing onto a new sequence with the same number also reconfirms. Never foreshadow
      * an upcoming zone.
      *
-     * Links without NVDB speed (typical roundabout connectors) must not clear [lastSpeedKmh]:
-     * otherwise exiting onto a signed road with the same number never re-alerts.
+     * Near a 362 plate, the plate km/t wins over NVDB fartsdata so a wrong stretch value
+     * cannot flap against the sign you are passing.
+     *
+     * Links without NVDB speed (side streets / roundabout connectors) must not clear
+     * [lastSpeedKmh], and must still advance [lastDrivingSequenceId] so exiting onto a signed
+     * road can reconfirm. Driving identity is only advanced while [driving].
      */
     private fun collectSpeedLimit(match: Match, driving: Boolean): Alert? {
-        val currentKmh = graph.speedAt(match.sequenceId, match.position, match.direction)
-        if (currentKmh == null) {
+        if (!driving) {
             return null
         }
+        val previousSequenceId = lastDrivingSequenceId
+        val previousDirection = lastDrivingDirection
+        val previousPosition = lastDrivingPosition
+        lastDrivingSequenceId = match.sequenceId
+        lastDrivingDirection = match.direction
+        lastDrivingPosition = match.position
+
+        val currentKmh = effectiveSpeedKmh(match) ?: return null
         val previousKmh = lastSpeedKmh
-        val previousSequenceId = lastSpeedSequenceId
-        val previousDirection = lastSpeedDirection
         lastSpeedKmh = currentKmh
-        lastSpeedSequenceId = match.sequenceId
-        lastSpeedDirection = match.direction
-        if (!driving) return null
         if (previousKmh != null && previousKmh != currentKmh) {
             return speedAlert(match, currentKmh, 0.0, match.position)
         }
-        // Turning onto a different road: confirm the limit even when the number is unchanged.
-        // With repeatReminderSigns, also reconfirm when continuing onto a new sequence
-        // that still carries the same number (reminder plates / sequence splits).
-        if (previousSequenceId != null && previousDirection != null) {
+        // Turning onto a different road: confirm the limit even when the number is unchanged,
+        // including when the road we left had no NVDB speed at all.
+        // With repeatReminderSigns, also reconfirm when continuing onto a new sequence.
+        if (previousSequenceId != null &&
+            previousDirection != null &&
+            previousPosition != null &&
+            previousSequenceId != match.sequenceId
+        ) {
             val turnedOntoNewRoad = isTurnOntoNewRoad(
                 previousSequenceId,
                 previousDirection,
+                previousPosition,
                 match,
             )
-            val continuedOntoNewSequence = settings.repeatReminderSigns &&
-                previousSequenceId != match.sequenceId
-            if (turnedOntoNewRoad || continuedOntoNewSequence) {
+            if (turnedOntoNewRoad || settings.repeatReminderSigns) {
                 return speedAlert(match, currentKmh, 0.0, match.position)
             }
         }
         return null
     }
 
+    private fun effectiveSpeedKmh(match: Match): Int? {
+        nearestSpeedPlate(match)?.let { plate ->
+            val plateKmh = parseSpeedLimitKmh(plate.payload) ?: return@let
+            plateAnchoredKmh = plateKmh
+            plateAnchoredSequenceId = match.sequenceId
+            return plateKmh
+        }
+        if (plateAnchoredSequenceId == match.sequenceId) {
+            plateAnchoredKmh?.let { anchoredKmh ->
+                return anchoredKmh
+            }
+        } else {
+            plateAnchoredKmh = null
+            plateAnchoredSequenceId = null
+        }
+        return graph.speedAt(match.sequenceId, match.position, match.direction)
+    }
+
     private fun speedAlert(match: Match, kmh: Int, metersAhead: Double, atPos: Double): Alert? {
         if (!settings.enabled(AlertKind.SPEED_LIMIT, kmh.toString())) return null
         val key = "SPEED_LIMIT:$kmh:${match.sequenceId}:${(atPos * 1000).toInt()}"
         if (!fired.add(key)) return null
+        emittedSpeedKmhThisUpdate = kmh
+        lastAnnouncedSpeedKmh = kmh
         return Alert(
             kind = AlertKind.SPEED_LIMIT,
             nvdbId = kmh.toLong(),
@@ -371,6 +424,113 @@ class AlertEngine(
             objectType = null,
             payload = kmh.toString(),
         )
+    }
+
+    /**
+     * Fixed 362 plates confirm the limit at the sign. Used when NVDB fartsdata disagrees with
+     * the plate you actually pass, and for same-number reminders on turn / repeat setting.
+     * Not fired from the long-range horizon loop.
+     */
+    private fun collectSpeedAtPlate(match: Match, driving: Boolean): Alert? {
+        if (!driving) {
+            return null
+        }
+        val plate = nearestSpeedPlate(match) ?: return null
+        val kmh = parseSpeedLimitKmh(plate.payload) ?: return null
+        if (!settings.enabled(AlertKind.SPEED_LIMIT, kmh.toString())) {
+            return null
+        }
+        if (emittedSpeedKmhThisUpdate == kmh) {
+            return null
+        }
+        val turnedOntoThisRoad = run {
+            val previousSequenceId = lastMatchSequenceId ?: return@run false
+            val previousDirection = lastMatchDirection ?: return@run false
+            val previousPosition = lastMatchPosition ?: return@run false
+            isTurnOntoNewRoad(previousSequenceId, previousDirection, previousPosition, match)
+        }
+        val differsFromAnnounced = lastAnnouncedSpeedKmh == null || lastAnnouncedSpeedKmh != kmh
+        val sameNumberReminder = lastAnnouncedSpeedKmh == kmh &&
+            (settings.repeatReminderSigns || turnedOntoThisRoad)
+        if (!differsFromAnnounced && !sameNumberReminder) {
+            return null
+        }
+        val key = fireKey(AlertKind.SPEED_LIMIT, plate.nvdbId)
+        if (!fired.add(key)) {
+            return null
+        }
+        emittedSpeedKmhThisUpdate = kmh
+        lastSpeedKmh = kmh
+        lastAnnouncedSpeedKmh = kmh
+        val metersAhead = speedPlateSignedMeters(match, plate)?.coerceAtLeast(0.0) ?: 0.0
+        return Alert(
+            kind = AlertKind.SPEED_LIMIT,
+            nvdbId = plate.nvdbId,
+            metersAhead = metersAhead,
+            title = "Fartsgrense $kmh",
+            body = AlertCopy.bodyFor(AlertKind.SPEED_LIMIT, metersAhead, kmh.toString()).ifBlank {
+                "$kmh km/t"
+            },
+            sequenceId = plate.sequenceId,
+            objectType = RoadObjectType.SPEED_LIMIT,
+            payload = kmh.toString(),
+        )
+    }
+
+    private fun nearestSpeedPlate(match: Match): RoadObject? {
+        val sequence = graph.sequences[match.sequenceId] ?: return null
+        if (sequence.lengthMeters <= 0.0) {
+            return null
+        }
+        var best: RoadObject? = null
+        var bestAbsMeters = Double.POSITIVE_INFINITY
+        for (obj in graph.objectsOn(match.sequenceId)) {
+            if (obj.type != RoadObjectType.SPEED_LIMIT || !obj.isPoint) {
+                continue
+            }
+            if (!obj.direction.matches(match.direction)) {
+                continue
+            }
+            if (parseSpeedLimitKmh(obj.payload) == null) {
+                continue
+            }
+            val signedMeters = speedPlateSignedMeters(match, obj) ?: continue
+            if (signedMeters > SPEED_AT_PLATE_METERS || signedMeters < -5.0) {
+                continue
+            }
+            val absMeters = kotlin.math.abs(signedMeters)
+            if (absMeters < bestAbsMeters) {
+                bestAbsMeters = absMeters
+                best = obj
+            }
+        }
+        return best
+    }
+
+    private fun speedPlateSignedMeters(match: Match, obj: RoadObject): Double? {
+        val sequence = graph.sequences[match.sequenceId] ?: return null
+        if (sequence.lengthMeters <= 0.0) {
+            return null
+        }
+        return if (match.direction == TravelDirection.MED) {
+            (obj.fromPos - match.position) * sequence.lengthMeters
+        } else {
+            (match.position - obj.fromPos) * sequence.lengthMeters
+        }
+    }
+
+    private fun parseSpeedLimitKmh(payload: String): Int? {
+        val trimmed = payload.trim()
+        if (trimmed.isEmpty()) {
+            return null
+        }
+        val token = if (trimmed.contains('.')) {
+            trimmed.substringAfter('.').takeWhile { char -> char.isDigit() }
+        } else {
+            trimmed.takeWhile { char -> char.isDigit() }
+        }
+        val kmh = token.toIntOrNull() ?: return null
+        return kmh.takeIf { value -> value in 5..130 }
     }
 
     private fun collectPriorityEnter(match: Match, driving: Boolean): Alert? {
@@ -461,7 +621,8 @@ class AlertEngine(
     private fun maybeAllowPriorityAlertAfterTurn(match: Match) {
         val previousSequenceId = lastMatchSequenceId ?: return
         val previousDirection = lastMatchDirection ?: return
-        if (!isTurnOntoNewRoad(previousSequenceId, previousDirection, match)) {
+        val previousPosition = lastMatchPosition ?: return
+        if (!isTurnOntoNewRoad(previousSequenceId, previousDirection, previousPosition, match)) {
             return
         }
         if (!isOnPriorityContext(match)) {
@@ -481,29 +642,29 @@ class AlertEngine(
     private fun rememberMatch(match: Match) {
         lastMatchSequenceId = match.sequenceId
         lastMatchDirection = match.direction
+        lastMatchPosition = match.position
     }
 
     /**
      * True when the matcher moved onto a different sequence with a clear heading change
-     * (side street / turn). Straight continuation through a junction is not a new road.
+     * (side street / turn). Uses the last matched position on the previous sequence — not the
+     * geometric end — so mid-link turns are not compared against a far-away exit bearing.
+     * Straight continuation through a junction is not a new road.
      */
     private fun isTurnOntoNewRoad(
         previousSequenceId: Long,
         previousDirection: TravelDirection,
+        previousPosition: Double,
         current: Match,
     ): Boolean {
         if (previousSequenceId == current.sequenceId) {
             return false
         }
-        val exitBearing = travelBearing(previousSequenceId, exitPosition(previousDirection), previousDirection)
+        val exitBearing = travelBearing(previousSequenceId, previousPosition, previousDirection)
             ?: return true
         val entryBearing = travelBearing(current.sequenceId, current.position, current.direction)
             ?: return true
         return Geo.headingDeltaDegrees(exitBearing, entryBearing) >= NEW_ROAD_TURN_DEGREES
-    }
-
-    private fun exitPosition(direction: TravelDirection): Double {
-        return if (direction == TravelDirection.MED) 1.0 else 0.0
     }
 
     private fun travelBearing(sequenceId: Long, position: Double, direction: TravelDirection): Double? {
@@ -689,6 +850,9 @@ class AlertEngine(
     companion object {
         /** Alert 206 plates only when this close — entering, not foreshadowing. */
         const val PRIORITY_AT_PLATE_METERS = 20.0
+
+        /** Alert 362 plates only when this close — entering, not foreshadowing. */
+        const val SPEED_AT_PLATE_METERS = 20.0
 
         /** Heading change that counts as turning onto a different road for speed re-confirm. */
         const val NEW_ROAD_TURN_DEGREES = 40.0

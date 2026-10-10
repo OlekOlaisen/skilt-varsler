@@ -20,6 +20,12 @@ class SettingsStore(private val context: Context) {
         }
         val byId = SignCatalog.all.associate { sign ->
             val stored = prefs[booleanPreferencesKey(signKey(sign.id))]
+                // Legacy toggle id before roundabout moved from fare 126 → påbud 406.
+                ?: if (sign.id == "hazard:406") {
+                    prefs[booleanPreferencesKey(signKey("hazard:126"))]
+                } else {
+                    null
+                }
             sign.id to (stored ?: categoryFallback[sign.categoryKey] ?: sign.defaultEnabled)
         }
         AlertSettings(

@@ -246,5 +246,6 @@ fun RoadObjectType.toAlertKind(): AlertKind? = when (this) {
     RoadObjectType.YIELD -> AlertKind.YIELD
     RoadObjectType.HAZARD -> AlertKind.HAZARD
     RoadObjectType.PRIORITY_ROAD -> AlertKind.PRIORITY_ROAD
+    RoadObjectType.SPEED_LIMIT -> AlertKind.SPEED_LIMIT
     RoadObjectType.MUNICIPALITY -> AlertKind.MUNICIPALITY
 }

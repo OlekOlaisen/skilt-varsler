@@ -58,7 +58,10 @@ def test_classifies_stop_yield_and_hazard():
     assert classify_sign("146.1") == "HAZARD"
     assert classify_sign("206") == "PRIORITY_ROAD"
     assert classify_sign("208") == "PRIORITY_ROAD"
-    assert classify_sign("362.80") is None
+    assert classify_sign("362.80") == "SPEED_LIMIT"
+    assert classify_sign("362.40 - Fartsgrense 40 km/t") == "SPEED_LIMIT"
+    assert classify_sign("362.50") == "SPEED_LIMIT"
+    assert classify_sign("362") is None
     assert classify_sign("108 - Ujevn veg") == "HAZARD"
     assert classify_sign("110 - Vegarbeid") == "HAZARD"
     assert classify_sign("122 - Tunnel.") == "HAZARD"
@@ -81,12 +84,16 @@ def test_full_nvdb_verdi_ingests_as_canonical_payload():
             nvdb_object(3, {"Skiltnummer": "122 - Tunnel."}, from_pos=0.5),
             nvdb_object(4, {"Skiltnummer": "406 - Påbudt kjøring i rundkjøring"}, from_pos=0.6),
             nvdb_object(5, {"Skiltnummer": "126"}, from_pos=0.7),
+            nvdb_object(6, {"Skiltnummer": "362.40 - Fartsgrense 40 km/t"}, from_pos=0.8),
+            nvdb_object(7, {"Skiltnummer": "362.50"}, from_pos=0.9),
         ],
     )
     by_id = {obj.nvdb_id: obj for obj in graph.objects}
     assert by_id[1].type == "HAZARD" and by_id[1].payload == "108"
     assert by_id[2].type == "HAZARD" and by_id[2].payload == "109"
     assert by_id[3].type == "HAZARD" and by_id[3].payload == "122"
+    assert by_id[6].type == "SPEED_LIMIT" and by_id[6].payload == "40"
+    assert by_id[7].type == "SPEED_LIMIT" and by_id[7].payload == "50"
     assert by_id[4].type == "HAZARD" and by_id[4].payload == "406"
     assert by_id[5].type == "HAZARD" and by_id[5].payload == "406"
 

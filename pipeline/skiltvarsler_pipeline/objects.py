@@ -46,6 +46,22 @@ def parse_skiltnummer(number: str) -> str | None:
     return major
 
 
+def speed_limit_kmh_payload(parsed: str) -> str | None:
+    """Map 362.40 / 362.100 → payload km/t string used by the app catalog."""
+    head, _, minor = parsed.partition(".")
+    if head != "362" or not minor:
+        return None
+    digits = []
+    for char in minor:
+        if char.isdigit():
+            digits.append(char)
+        else:
+            break
+    if not digits:
+        return None
+    return str(int("".join(digits)))
+
+
 def canonical_skilt_payload(number: str) -> str | None:
     """Normalize plate payload; remap aliases that the app catalogs under another number."""
     parsed = parse_skiltnummer(number)
@@ -56,6 +72,9 @@ def canonical_skilt_payload(number: str) -> str | None:
     head = parsed.split(".", 1)[0]
     if parsed in ROUNDABOUT_NUMBERS or head in {"406", "126"}:
         return "406"
+    kmh = speed_limit_kmh_payload(parsed)
+    if kmh is not None:
+        return kmh
     return parsed
 
 
@@ -464,6 +483,9 @@ def classify_sign(number: str) -> str | None:
     if parsed in FARTSHUMP_ALIASES:
         return "HAZARD"
     head = parsed.split(".", 1)[0]
+    # Fixed 362.xx plates; variable/electronic limits are out of scope.
+    if head == "362" and speed_limit_kmh_payload(parsed) is not None:
+        return "SPEED_LIMIT"
     # 406 is outside the 100–156 fare range but is the primary roundabout plate.
     if parsed in ROUNDABOUT_NUMBERS or head == "406":
         return "HAZARD"

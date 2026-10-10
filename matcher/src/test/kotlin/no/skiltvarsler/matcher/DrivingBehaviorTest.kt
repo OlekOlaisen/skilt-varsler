@@ -387,6 +387,114 @@ class DrivingBehaviorTest {
     }
 
     @Test
+    fun speedPlateOverridesWrongFartsdataAtTheSign() {
+        val graph = SyntheticGraph.roadWithFartsdata30AndPlate40()
+        val link = graph.sequences.getValue(SyntheticGraph.SEQ_SPEED_PLATE).links.first()
+        val along = Replay.alongLink(link, TravelDirection.MED, speedMetersPerSecond = 12.0)
+        val result = Replay.play(AlertEngine(graph), along)
+        val limits = result.alertsOf(AlertKind.SPEED_LIMIT)
+        assertThat(limits.map { alert -> alert.payload }).contains("40")
+        assertThat(limits.none { alert -> alert.payload == "30" }).isTrue()
+        val plateAlert = limits.first { alert -> alert.payload == "40" }
+        assertThat(plateAlert.metersAhead).isAtMost(AlertEngine.SPEED_AT_PLATE_METERS)
+    }
+
+    @Test
+    fun speedPlateAppearsOnHorizonBeforeAlert() {
+        val graph = SyntheticGraph.roadWithFartsdata30AndPlate40()
+        val link = graph.sequences.getValue(SyntheticGraph.SEQ_SPEED_PLATE).links.first()
+        val match = Match(
+            linkId = link.id,
+            sequenceId = SyntheticGraph.SEQ_SPEED_PLATE,
+            position = 0.35,
+            direction = TravelDirection.MED,
+            snapped = link.points[link.points.size / 3],
+            distanceToLinkMeters = 0.0,
+        )
+        val horizon = HorizonScanner(graph).scan(match, speedMetersPerSecond = 12.0)
+        assertThat(horizon.map { candidate -> candidate.obj.nvdbId })
+            .contains(SyntheticGraph.SPEED_PLATE_40_ID)
+        assertThat(horizon.first { candidate ->
+            candidate.obj.nvdbId == SyntheticGraph.SPEED_PLATE_40_ID
+        }.metersAhead).isGreaterThan(AlertEngine.SPEED_AT_PLATE_METERS)
+    }
+
+    @Test
+    fun turningFromUnsignedSideStreetOntoSignedMainAlertsSpeed() {
+        val graph = SyntheticGraph.unsignedSideStreetOntoSignedMain()
+        val side = graph.sequences.getValue(SyntheticGraph.SEQ_SIDE).links.first()
+        val continueLink = graph.sequences.getValue(SyntheticGraph.SEQ_CONTINUE).links.first()
+        val alongSide = Replay.alongLink(
+            side,
+            TravelDirection.MOT,
+            speedMetersPerSecond = 12.0,
+        )
+        val alongContinue = Replay.alongLink(
+            continueLink,
+            TravelDirection.MED,
+            speedMetersPerSecond = 12.0,
+            startTimeMs = alongSide.last().timeMs + 1_000L,
+        )
+        val result = Replay.play(AlertEngine(graph), alongSide + alongContinue)
+        assertThat(result.matches.any { match -> match.sequenceId == SyntheticGraph.SEQ_SIDE }).isTrue()
+        assertThat(result.matches.any { match -> match.sequenceId == SyntheticGraph.SEQ_CONTINUE }).isTrue()
+        val limits = result.alertsOf(AlertKind.SPEED_LIMIT)
+        assertThat(limits.map { alert -> alert.payload }).contains("40")
+        assertThat(
+            limits.any { alert ->
+                alert.sequenceId == SyntheticGraph.SEQ_CONTINUE ||
+                    alert.sequenceId == SyntheticGraph.SEQ_MAIN
+            },
+        ).isTrue()
+    }
+
+    @Test
+    fun midTrunkTurnReconfirmsSameSpeedEvenWhenSequenceEndFacesSideStreet() {
+        val graph = SyntheticGraph.northRoadBendingEastWithMidSideStreet()
+        val approach = graph.sequences.getValue(SyntheticGraph.SEQ_MAIN).links.first()
+        val side = graph.sequences.getValue(SyntheticGraph.SEQ_SIDE).links.first()
+        val alongMain = Replay.alongLink(approach, TravelDirection.MED, speedMetersPerSecond = 12.0)
+        val beforeTurn = alongMain.takeWhile { fix -> fix.timeMs <= 18_000L }
+        val alongSide = Replay.alongLink(
+            side,
+            TravelDirection.MED,
+            speedMetersPerSecond = 12.0,
+            startTimeMs = beforeTurn.last().timeMs + 1_000L,
+        )
+        val result = Replay.play(AlertEngine(graph), beforeTurn + alongSide)
+        val limitsOnSide = result.alertsOf(AlertKind.SPEED_LIMIT)
+            .filter { alert -> alert.sequenceId == SyntheticGraph.SEQ_SIDE }
+        assertThat(limitsOnSide).isNotEmpty()
+        assertThat(limitsOnSide.first().payload).isEqualTo("40")
+    }
+
+    @Test
+    fun slowCreepOntoNewSequenceStillReconfirmsWhenDrivingResumesWithRepeat() {
+        val graph = SyntheticGraph.mainRoadWithSideStreet()
+        val main = graph.sequences.getValue(SyntheticGraph.SEQ_MAIN).links.first()
+        val continueLink = graph.sequences.getValue(SyntheticGraph.SEQ_CONTINUE).links.first()
+        val alongMain = Replay.alongLink(main, TravelDirection.MED, speedMetersPerSecond = 12.0)
+        val crawlContinue = Replay.alongLink(
+            continueLink,
+            TravelDirection.MED,
+            speedMetersPerSecond = 1.0,
+            startTimeMs = alongMain.last().timeMs + 1_000L,
+        ).take(4)
+        val driveContinue = Replay.alongLink(
+            continueLink,
+            TravelDirection.MED,
+            speedMetersPerSecond = 12.0,
+            startTimeMs = crawlContinue.last().timeMs + 1_000L,
+        )
+        val engine = AlertEngine(graph, AlertSettings(repeatReminderSigns = true))
+        val result = Replay.play(engine, alongMain + crawlContinue + driveContinue)
+        val limitsOnContinue = result.alertsOf(AlertKind.SPEED_LIMIT)
+            .filter { alert -> alert.sequenceId == SyntheticGraph.SEQ_CONTINUE }
+        assertThat(limitsOnContinue).isNotEmpty()
+        assertThat(limitsOnContinue.first().payload).isEqualTo("40")
+    }
+
+    @Test
     fun unsignedConnectorDoesNotSwallowSpeedReconfirmOnExit() {
         val graph = SyntheticGraph.eastRoadViaUnsignedConnectorToSouth()
         val east = graph.sequences.getValue(SyntheticGraph.SEQ_EAST).links.first()

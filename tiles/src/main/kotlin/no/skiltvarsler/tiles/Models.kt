@@ -37,6 +37,7 @@ enum class RoadObjectType {
     YIELD,
     HAZARD,
     PRIORITY_ROAD,
+    SPEED_LIMIT,
     MUNICIPALITY,
     ;
 

@@ -104,7 +104,10 @@ object AlertCopy {
             AlertKind.SECTION_ATK_START -> "Streknings-ATK"
             AlertKind.SECTION_ATK_END -> "Slutt streknings-ATK"
             AlertKind.WILDLIFE -> wildlifeTitle(payload)
-            AlertKind.SPEED_LIMIT -> payload
+            AlertKind.SPEED_LIMIT -> {
+                val kmh = payload.trim().takeWhile { char -> char.isDigit() }
+                if (kmh.isNotEmpty()) "Fartsgrense $kmh" else "Fartsgrense"
+            }
             AlertKind.ROADWORK -> situationTitle(parsed, "Vegarbeid")
             AlertKind.ACCIDENT -> situationTitle(parsed, "Trafikkulykke")
         }

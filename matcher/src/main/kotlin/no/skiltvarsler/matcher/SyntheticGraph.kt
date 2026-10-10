@@ -162,10 +162,142 @@ object SyntheticGraph {
 
     const val SIDE_STOP_ID = 910006L
     const val SIDE_YIELD_ID = 910007L
+    const val SEQ_SPEED_PLATE = 420L
+    const val SPEED_PLATE_40_ID = 910040L
+    const val SPEED_PLATE_POS = 0.55
     const val ANGLED_SIDE_DEGREES = 30.0
 
     fun mainRoadWithSideStreet(): RoadGraph {
         return junctionGraph(sideBearingDegrees = 90.0, includeJunctionControl = false)
+    }
+
+    /**
+     * Stretch signed 30 in fartsdata but with a physical 362.40 plate mid-link — the Østensjø
+     * mismatch case where the plate must win at the sign.
+     */
+    fun roadWithFartsdata30AndPlate40(): RoadGraph {
+        val end = Geo.offsetMeters(origin, northMeters = MAIN_LENGTH_METERS, eastMeters = 0.0)
+        val builder = RoadGraphBuilder().apply {
+            tileId = "fixture-fartsdata-vs-plate"
+            version = "test"
+        }
+        builder.addNode(RoadNode(1, origin))
+        builder.addNode(RoadNode(2, end))
+        builder.addLink(
+            RoadLink(
+                id = 70,
+                sequenceId = SEQ_SPEED_PLATE,
+                linkNumber = 1,
+                startNodeId = 1,
+                endNodeId = 2,
+                startPos = 0.0,
+                endPos = 1.0,
+                lengthMeters = MAIN_LENGTH_METERS,
+                typeVeg = "Enkel bilveg",
+                matchable = true,
+                points = dense(origin, end),
+            ),
+        )
+        builder.setSequenceLength(SEQ_SPEED_PLATE, MAIN_LENGTH_METERS)
+        builder.addSpeed(SpeedInterval(SEQ_SPEED_PLATE, 0.0, 1.0, 30, TravelDirection.MED))
+        builder.addObject(
+            RoadObject(
+                nvdbId = SPEED_PLATE_40_ID,
+                type = RoadObjectType.SPEED_LIMIT,
+                sequenceId = SEQ_SPEED_PLATE,
+                fromPos = SPEED_PLATE_POS,
+                toPos = SPEED_PLATE_POS,
+                direction = TravelDirection.MED,
+                payload = "40",
+            ),
+        )
+        return builder.build()
+    }
+
+    /**
+     * Northbound trunk that bends east at the far end, with a side street leaving east mid-trunk.
+     * Sequence-end bearing aligns with the side street; only the mid-trunk leave heading is a turn.
+     */
+    fun northRoadBendingEastWithMidSideStreet(): RoadGraph {
+        val leaveNode = Geo.offsetMeters(origin, northMeters = MAIN_LENGTH_METERS, eastMeters = 0.0)
+        val northFar = Geo.offsetMeters(leaveNode, northMeters = MAIN_LENGTH_METERS, eastMeters = 0.0)
+        val eastEnd = Geo.offsetMeters(northFar, northMeters = 0.0, eastMeters = MAIN_LENGTH_METERS)
+        val sideEnd = Geo.offsetMeters(leaveNode, northMeters = 0.0, eastMeters = SIDE_LENGTH_METERS)
+        val segmentMeters = MAIN_LENGTH_METERS
+        val builder = RoadGraphBuilder().apply {
+            tileId = "fixture-bend-mid-side"
+            version = "test"
+        }
+        builder.addNode(RoadNode(1, origin))
+        builder.addNode(RoadNode(2, leaveNode))
+        builder.addNode(RoadNode(3, northFar))
+        builder.addNode(RoadNode(4, eastEnd))
+        builder.addNode(RoadNode(5, sideEnd))
+        builder.addLink(
+            RoadLink(
+                id = 60,
+                sequenceId = SEQ_MAIN,
+                linkNumber = 1,
+                startNodeId = 1,
+                endNodeId = 2,
+                startPos = 0.0,
+                endPos = 1.0 / 3.0,
+                lengthMeters = segmentMeters,
+                typeVeg = "Enkel bilveg",
+                matchable = true,
+                points = dense(origin, leaveNode),
+            ),
+        )
+        builder.addLink(
+            RoadLink(
+                id = 61,
+                sequenceId = SEQ_MAIN,
+                linkNumber = 2,
+                startNodeId = 2,
+                endNodeId = 3,
+                startPos = 1.0 / 3.0,
+                endPos = 2.0 / 3.0,
+                lengthMeters = segmentMeters,
+                typeVeg = "Enkel bilveg",
+                matchable = true,
+                points = dense(leaveNode, northFar),
+            ),
+        )
+        builder.addLink(
+            RoadLink(
+                id = 62,
+                sequenceId = SEQ_MAIN,
+                linkNumber = 3,
+                startNodeId = 3,
+                endNodeId = 4,
+                startPos = 2.0 / 3.0,
+                endPos = 1.0,
+                lengthMeters = segmentMeters,
+                typeVeg = "Enkel bilveg",
+                matchable = true,
+                points = dense(northFar, eastEnd),
+            ),
+        )
+        builder.addLink(
+            RoadLink(
+                id = 63,
+                sequenceId = SEQ_SIDE,
+                linkNumber = 1,
+                startNodeId = 2,
+                endNodeId = 5,
+                startPos = 0.0,
+                endPos = 1.0,
+                lengthMeters = SIDE_LENGTH_METERS,
+                typeVeg = "Enkel bilveg",
+                matchable = true,
+                points = dense(leaveNode, sideEnd),
+            ),
+        )
+        builder.setSequenceLength(SEQ_MAIN, segmentMeters * 3.0)
+        builder.setSequenceLength(SEQ_SIDE, SIDE_LENGTH_METERS)
+        builder.addSpeed(SpeedInterval(SEQ_MAIN, 0.0, 1.0, 40, TravelDirection.MED))
+        builder.addSpeed(SpeedInterval(SEQ_SIDE, 0.0, 1.0, 40, TravelDirection.MED))
+        return builder.build()
     }
 
     /**
@@ -255,12 +387,25 @@ object SyntheticGraph {
         )
     }
 
+    /**
+     * Side street with no NVDB fartsdata turning onto a signed 40 main road — common on small
+     * residential streets that still have a physical 40 plate.
+     */
+    fun unsignedSideStreetOntoSignedMain(): RoadGraph {
+        return junctionGraph(
+            sideBearingDegrees = 90.0,
+            includeJunctionControl = false,
+            sideHasSpeed = false,
+        )
+    }
+
     private fun junctionGraph(
         sideBearingDegrees: Double,
         includeJunctionControl: Boolean,
         mainPriorityStretch: Boolean = false,
         continuePriorityPlate: Boolean = true,
         continuePriorityStretch: Boolean = false,
+        sideHasSpeed: Boolean = true,
     ): RoadGraph {
         val junction = Geo.offsetMeters(origin, northMeters = MAIN_LENGTH_METERS, eastMeters = 0.0)
         val northEnd = Geo.offsetMeters(junction, northMeters = MAIN_LENGTH_METERS, eastMeters = 0.0)
@@ -431,7 +576,9 @@ object SyntheticGraph {
         }
         builder.addSpeed(SpeedInterval(SEQ_MAIN, 0.0, 1.0, 40, TravelDirection.MED))
         builder.addSpeed(SpeedInterval(SEQ_CONTINUE, 0.0, 1.0, 40, TravelDirection.MED))
-        builder.addSpeed(SpeedInterval(SEQ_SIDE, 0.0, 1.0, 40, TravelDirection.MED))
+        if (sideHasSpeed) {
+            builder.addSpeed(SpeedInterval(SEQ_SIDE, 0.0, 1.0, 40, TravelDirection.MED))
+        }
         return builder.build()
     }
 
