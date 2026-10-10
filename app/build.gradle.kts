@@ -23,8 +23,8 @@ android {
         applicationId = "no.skiltvarsler"
         minSdk = 29
         targetSdk = 35
-        versionCode = 26
-        versionName = "0.1.25"
+        versionCode = 27
+        versionName = "0.1.26"
         val tileBaseUrl = (project.findProperty("tileBaseUrl") as String?)
             ?: "https://github.com/OlekOlaisen/skilt-varsler/releases/latest/download"
         buildConfigField("String", "TILE_BASE_URL", "\"$tileBaseUrl\"")

@@ -61,7 +61,9 @@ fun LoadBar(
     fraction: Float?,
     label: String,
     modifier: Modifier = Modifier,
+    barColor: Color = MaterialTheme.colorScheme.primary,
 ) {
+    val percentLabel = fraction?.let { value -> "${(value * 100f).toInt().coerceIn(0, 100)}%" }
     Column(
         modifier = modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(8.dp),
@@ -71,7 +73,7 @@ fun LoadBar(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(8.dp),
-                color = MaterialTheme.colorScheme.primary,
+                color = barColor,
                 trackColor = MaterialTheme.colorScheme.surfaceVariant,
                 strokeCap = StrokeCap.Round,
             )
@@ -81,17 +83,36 @@ fun LoadBar(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(8.dp),
-                color = MaterialTheme.colorScheme.primary,
+                color = barColor,
                 trackColor = MaterialTheme.colorScheme.surfaceVariant,
                 strokeCap = StrokeCap.Round,
             )
         }
-        if (label.isNotBlank()) {
-            Text(
-                label,
-                style = MaterialTheme.typography.labelLarge,
-                color = MaterialTheme.colorScheme.secondary,
-            )
+        if (label.isNotBlank() || percentLabel != null) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                if (label.isNotBlank()) {
+                    Text(
+                        label,
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.secondary,
+                        modifier = Modifier.weight(1f),
+                    )
+                } else {
+                    Spacer(Modifier.weight(1f))
+                }
+                if (percentLabel != null) {
+                    Text(
+                        percentLabel,
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.SemiBold,
+                        color = barColor,
+                    )
+                }
+            }
         }
     }
 }
@@ -130,17 +151,38 @@ fun TileInventoryCard(
 
 @Composable
 private fun TileInventoryRow(tile: TileInventoryItem) {
+    val downloadProgress = tile.downloadProgress
     Row(
         modifier = Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        Column(modifier = Modifier.weight(1f)) {
+        Column(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
             Text(
                 tile.name,
                 style = MaterialTheme.typography.bodyLarge,
             )
-            if (tile.active) {
+            if (downloadProgress != null) {
+                val percent = (downloadProgress * 100f).toInt().coerceIn(0, 100)
+                LinearProgressIndicator(
+                    progress = { downloadProgress },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(6.dp),
+                    color = TileActiveGreen,
+                    trackColor = MaterialTheme.colorScheme.surfaceVariant,
+                    strokeCap = StrokeCap.Round,
+                )
+                Text(
+                    "Laster ned $percent%",
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.SemiBold,
+                    color = TileActiveGreen,
+                )
+            } else if (tile.active) {
                 Text(
                     "Aktiv nå",
                     style = MaterialTheme.typography.labelSmall,
@@ -183,32 +225,50 @@ fun StatusCard(
     value: String,
     subtitle: String = "",
     alert: Alert? = null,
+    loadFraction: Float? = null,
+    loadLabel: String = "",
+    showLoadBar: Boolean = false,
 ) {
     Card(
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         modifier = Modifier.fillMaxWidth(),
     ) {
-        Row(
-            Modifier.padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(16.dp),
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            if (alert != null) {
-                TrafficSignImage(alert = alert, size = 72.dp)
-            }
-            Column(
-                modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(4.dp),
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(16.dp),
             ) {
-                Text(title, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.secondary)
-                Text(value, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
-                if (subtitle.isNotBlank()) {
+                if (alert != null) {
+                    TrafficSignImage(alert = alert, size = 72.dp)
+                }
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
                     Text(
-                        subtitle,
-                        style = MaterialTheme.typography.bodySmall,
+                        title,
+                        style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.secondary,
                     )
+                    Text(
+                        value,
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                    if (subtitle.isNotBlank()) {
+                        Text(
+                            subtitle,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.secondary,
+                        )
+                    }
                 }
+            }
+            if (showLoadBar) {
+                LoadBar(fraction = loadFraction, label = loadLabel)
             }
         }
     }

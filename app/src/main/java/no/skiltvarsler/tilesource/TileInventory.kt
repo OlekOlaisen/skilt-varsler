@@ -28,6 +28,8 @@ data class TileInventoryItem(
     val tag: TileCacheTag,
     /** True when the tile is part of the active map-matching window. */
     val active: Boolean = false,
+    /** 0–1 while this tile file is downloading; null when idle. */
+    val downloadProgress: Float? = null,
 )
 
 object TileInventory {

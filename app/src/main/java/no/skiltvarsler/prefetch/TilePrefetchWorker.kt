@@ -201,10 +201,19 @@ class TilePrefetchWorker(
                         }
                         LastAlertStore.setTileStatus(label)
                         try {
-                            downloadAtomically(File(cacheDir, tile.file), "$base/${tile.file}")
+                            LastAlertStore.setTileDownloadProgress(tile.id, 0f)
+                            downloadAtomically(
+                                target = File(cacheDir, tile.file),
+                                url = "$base/${tile.file}",
+                                onProgress = { fraction ->
+                                    LastAlertStore.setTileDownloadProgress(tile.id, fraction)
+                                },
+                            )
+                            LastAlertStore.setTileDownloadProgress(tile.id, null)
                             downloaded.incrementAndGet()
                             onFile(label)
                         } catch (error: Exception) {
+                            LastAlertStore.setTileDownloadProgress(tile.id, null)
                             DebugLog.append(
                                 "TILE skip ${tile.id}: ${error.message ?: error.javaClass.simpleName}",
                             )
@@ -284,13 +293,17 @@ class TilePrefetchWorker(
         }
     }
 
-    private fun downloadAtomically(target: File, url: String) {
+    private fun downloadAtomically(
+        target: File,
+        url: String,
+        onProgress: ((Float) -> Unit)? = null,
+    ) {
         val tmp = File(target.parentFile, "${target.name}.tmp")
         if (tmp.exists()) {
             tmp.delete()
         }
         try {
-            downloadTo(tmp, url)
+            downloadTo(tmp, url, onProgress)
             if (!AndroidTileLoader.isReadable(tmp)) {
                 tmp.delete()
                 error("korrupt nedlasting av ${target.name}")
@@ -306,6 +319,7 @@ class TilePrefetchWorker(
                 target.delete()
                 error("korrupt kommune-flis etter lagring av ${target.name}")
             }
+            onProgress?.invoke(1f)
         } catch (error: Exception) {
             if (tmp.exists()) {
                 tmp.delete()
@@ -320,9 +334,39 @@ class TilePrefetchWorker(
         }
     }
 
-    private fun downloadTo(file: File, url: String) {
-        open(url).inputStream.use { input ->
-            file.outputStream().use { output -> input.copyTo(output) }
+    private fun downloadTo(
+        file: File,
+        url: String,
+        onProgress: ((Float) -> Unit)? = null,
+    ) {
+        val connection = open(url)
+        val totalBytes = connection.contentLengthLong
+        connection.inputStream.use { input ->
+            file.outputStream().use { output ->
+                if (onProgress == null || totalBytes <= 0L) {
+                    input.copyTo(output)
+                    if (onProgress != null && totalBytes <= 0L) {
+                        onProgress(0f)
+                    }
+                    return
+                }
+                val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
+                var downloadedBytes = 0L
+                var lastReportedPercent = -1
+                while (true) {
+                    val bytesRead = input.read(buffer)
+                    if (bytesRead < 0) {
+                        break
+                    }
+                    output.write(buffer, 0, bytesRead)
+                    downloadedBytes += bytesRead
+                    val percent = ((downloadedBytes * 100L) / totalBytes).toInt().coerceIn(0, 100)
+                    if (percent != lastReportedPercent) {
+                        lastReportedPercent = percent
+                        onProgress((downloadedBytes.toFloat() / totalBytes.toFloat()).coerceIn(0f, 1f))
+                    }
+                }
+            }
         }
     }
 

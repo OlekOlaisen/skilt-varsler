@@ -35,10 +35,9 @@ fun HomeScreen(
 ) {
     val showBar = tileLoad != null || (tripActive && tripStatusLooksBusy(tripStatus))
     val fraction = tileLoad?.fraction
-    val barLabel = when {
+    val tripValue = when {
         tileLoad != null && tileLoad.label.isNotBlank() -> tileLoad.label
-        tripStatusLooksBusy(tripStatus) -> tripStatus
-        else -> ""
+        else -> tripStatus
     }
     Column(
         modifier = Modifier
@@ -52,9 +51,6 @@ fun HomeScreen(
             style = MaterialTheme.typography.headlineMedium,
             fontWeight = FontWeight.SemiBold,
         )
-        if (showBar) {
-            LoadBar(fraction = fraction, label = barLabel)
-        }
         Button(
             onClick = onToggleTrip,
             modifier = Modifier
@@ -76,7 +72,12 @@ fun HomeScreen(
                 style = MaterialTheme.typography.titleLarge,
             )
         }
-        StatusCard(title = "Kjøretur", value = tripStatus)
+        StatusCard(
+            title = "Kjøretur",
+            value = tripValue,
+            showLoadBar = showBar,
+            loadFraction = fraction,
+        )
         StatusCard(title = "Siste varsel", value = lastTitle, subtitle = lastBody, alert = lastAlert)
         TileInventoryCard(tiles = tileInventory)
     }

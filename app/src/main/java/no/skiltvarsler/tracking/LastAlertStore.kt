@@ -142,7 +142,14 @@ object LastAlertStore {
     }
 
     fun clearTileLoad() {
-        if (tileLoad.getAndSet(null) != null) {
+        val hadLoad = tileLoad.getAndSet(null) != null
+        val hadTileProgress = tileInventory.get().any { item -> item.downloadProgress != null }
+        if (hadTileProgress) {
+            tileInventory.set(
+                tileInventory.get().map { item -> item.copy(downloadProgress = null) },
+            )
+        }
+        if (hadLoad || hadTileProgress) {
             notifyListeners()
         }
     }
@@ -151,6 +158,29 @@ object LastAlertStore {
 
     fun setTileInventory(items: List<TileInventoryItem>) {
         tileInventory.set(items)
+        notifyListeners()
+    }
+
+    /**
+     * Updates byte-download progress for one tile. [progress] null clears the in-row bar.
+     * Skips notify when the rounded percent is unchanged to limit UI churn.
+     */
+    fun setTileDownloadProgress(tileId: String, progress: Float?) {
+        val current = tileInventory.get()
+        val index = current.indexOfFirst { item -> item.id == tileId }
+        if (index < 0) {
+            return
+        }
+        val previous = current[index]
+        val nextProgress = progress?.coerceIn(0f, 1f)
+        val previousPercent = previous.downloadProgress?.let { value -> (value * 100).toInt() }
+        val nextPercent = nextProgress?.let { value -> (value * 100).toInt() }
+        if (previousPercent == nextPercent && (previous.downloadProgress == null) == (nextProgress == null)) {
+            return
+        }
+        val updated = current.toMutableList()
+        updated[index] = previous.copy(downloadProgress = nextProgress)
+        tileInventory.set(updated)
         notifyListeners()
     }
 
