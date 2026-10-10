@@ -59,7 +59,7 @@
             </intent-filter>
             <meta-data
                 android:name="androidx.car.app.minCarApiLevel"
-                android:value="7" />
+                android:value="1" />
         </service>
 
         <provider

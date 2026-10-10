@@ -6,14 +6,12 @@ import androidx.car.app.CarContext
 import androidx.car.app.Screen
 import androidx.car.app.Session
 import androidx.car.app.model.Action
-import androidx.car.app.model.CarIcon
-import androidx.car.app.model.Header
 import androidx.car.app.model.ItemList
 import androidx.car.app.model.ListTemplate
+import androidx.car.app.model.MessageTemplate
 import androidx.car.app.model.Row
 import androidx.car.app.model.Template
 import androidx.car.app.validation.HostValidator
-import androidx.core.graphics.drawable.IconCompat
 import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.LifecycleOwner
 import kotlinx.coroutines.CoroutineScope
@@ -21,12 +19,9 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
-import no.skiltvarsler.R
+import no.skiltvarsler.log.DebugLog
 import no.skiltvarsler.settings.SettingsStore
-import no.skiltvarsler.signs.SignRenderer
-import no.skiltvarsler.tracking.AlertNotifier
 import no.skiltvarsler.tracking.LastAlertStore
-import no.skiltvarsler.tracking.UpcomingSign
 
 class SkiltCarAppService : CarAppService() {
     override fun createHostValidator(): HostValidator = HostValidator.ALLOW_ALL_HOSTS_VALIDATOR
@@ -40,8 +35,11 @@ class SkiltCarAppService : CarAppService() {
     }
 }
 
+/**
+ * Minimal Android Auto surface. Avoid Header (API 7), ActionStrip, and custom bitmaps —
+ * several hosts reject those and show only «uventet feil» / a black screen.
+ */
 class StatusScreen(carContext: CarContext) : Screen(carContext) {
-    private val store = SettingsStore(carContext)
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private val onStoreChanged: () -> Unit = {
         carContext.mainExecutor.execute { invalidate() }
@@ -65,9 +63,31 @@ class StatusScreen(carContext: CarContext) : Screen(carContext) {
     }
 
     override fun onGetTemplate(): Template {
+        return try {
+            buildStatusTemplate()
+        } catch (error: Throwable) {
+            DebugLog.append("CAR template failed: ${error.javaClass.simpleName}: ${error.message}")
+            // No custom actions here — title-only MessageTemplate actions are rejected by some hosts.
+            MessageTemplate.Builder("Åpne telefonen for innstillinger. Varsler vises over kartet.")
+                .setTitle("Skilt-varsler")
+                .setHeaderAction(Action.APP_ICON)
+                .build()
+        }
+    }
+
+    private fun buildStatusTemplate(): Template {
         val muted = LastAlertStore.alertsMuted
         val upcoming = LastAlertStore.upcomingSigns()
         val rows = ItemList.Builder()
+
+        rows.addItem(
+            Row.Builder()
+                .setTitle(if (muted) "Slå på varsler" else "Slå av varsler")
+                .addText(if (muted) "Varsler er slått av" else "Varsler er på")
+                .setOnClickListener { toggleMute() }
+                .build(),
+        )
+
         if (upcoming.isEmpty()) {
             rows.addItem(
                 Row.Builder()
@@ -77,48 +97,22 @@ class StatusScreen(carContext: CarContext) : Screen(carContext) {
             )
         } else {
             upcoming.forEach { sign ->
-                rows.addItem(rowFor(sign))
+                val row = Row.Builder().setTitle(sign.title)
+                val distance = sign.distanceLabel
+                if (distance.isNotBlank()) {
+                    row.addText(distance)
+                } else {
+                    row.addText("Skilt foran deg")
+                }
+                rows.addItem(row.build())
             }
         }
-        val muteAction = Action.Builder()
-            .setTitle(if (muted) "Slå på" else "Slå av")
-            .setOnClickListener { toggleMute() }
-            .build()
+
         return ListTemplate.Builder()
-            .setHeader(
-                Header.Builder()
-                    .setTitle(if (muted) "Varsler av" else "Skilt-varsler")
-                    .setStartHeaderAction(Action.APP_ICON)
-                    .addEndHeaderAction(muteAction)
-                    .build(),
-            )
+            .setTitle(if (muted) "Varsler av" else "Skilt-varsler")
+            .setHeaderAction(Action.APP_ICON)
             .setSingleList(rows.build())
             .build()
-    }
-
-    private fun rowFor(sign: UpcomingSign): Row {
-        val builder = Row.Builder()
-            .setTitle(sign.title)
-        val distance = sign.distanceLabel
-        if (distance.isNotBlank()) {
-            builder.addText(distance)
-        }
-        val bitmap = SignRenderer.bitmap(
-            carContext,
-            sign.kind,
-            sign.payload,
-            sign.nvdbId,
-            128,
-        )
-        val icon = if (bitmap != null) {
-            CarIcon.Builder(IconCompat.createWithBitmap(bitmap)).build()
-        } else {
-            CarIcon.Builder(
-                IconCompat.createWithResource(carContext, AlertNotifier.iconRes(sign.kind)),
-            ).build()
-        }
-        builder.setImage(icon)
-        return builder.build()
     }
 
     private fun emptyTitle(): String {
@@ -150,7 +144,11 @@ class StatusScreen(carContext: CarContext) : Screen(carContext) {
         LastAlertStore.setAlertsMuted(nextMuted)
         invalidate()
         scope.launch(Dispatchers.IO) {
-            store.setAlertsMuted(nextMuted)
+            try {
+                SettingsStore(carContext.applicationContext).setAlertsMuted(nextMuted)
+            } catch (error: Exception) {
+                DebugLog.append("CAR mute persist failed: ${error.message}")
+            }
         }
     }
 }
