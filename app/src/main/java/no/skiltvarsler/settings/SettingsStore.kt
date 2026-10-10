@@ -3,10 +3,12 @@ package no.skiltvarsler.settings
 import android.content.Context
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import no.skiltvarsler.BuildConfig
+import no.skiltvarsler.matcher.AlertPriority
 import no.skiltvarsler.matcher.AlertSettings
 import no.skiltvarsler.matcher.SignCatalog
 import no.skiltvarsler.matcher.SignGroup
@@ -28,9 +30,19 @@ class SettingsStore(private val context: Context) {
                 }
             sign.id to (stored ?: categoryFallback[sign.categoryKey] ?: sign.defaultEnabled)
         }
+        val priorityOverrides = SignCatalog.all.mapNotNull { sign ->
+            val stored = prefs[intPreferencesKey(priorityKey(sign.id))] ?: return@mapNotNull null
+            val tier = AlertPriority.coerce(stored)
+            if (tier == sign.defaultPriorityTier) {
+                null
+            } else {
+                sign.id to tier
+            }
+        }.toMap()
         AlertSettings(
             byId = byId,
             categoryFallback = categoryFallback,
+            priorityOverrides = priorityOverrides,
             alertsMuted = prefs[Keys.alertsMuted] ?: false,
             combineAlerts = prefs[Keys.combineAlerts] ?: true,
             repeatReminderSigns = prefs[Keys.repeatReminderSigns] ?: false,
@@ -55,6 +67,23 @@ class SettingsStore(private val context: Context) {
         context.dataStore.edit { prefs ->
             group.signs.forEach { sign ->
                 prefs[booleanPreferencesKey(signKey(sign.id))] = enabled
+            }
+        }
+    }
+
+    /**
+     * Persists a user priority override. Passing the catalog default removes the key
+     * so the foundation tier applies again.
+     */
+    suspend fun setSignPriority(id: String, tier: Int) {
+        val coerced = AlertPriority.coerce(tier)
+        val defaultTier = SignCatalog.defaultPriorityTier(id)
+        context.dataStore.edit { prefs ->
+            val key = intPreferencesKey(priorityKey(id))
+            if (coerced == defaultTier) {
+                prefs.remove(key)
+            } else {
+                prefs[key] = coerced
             }
         }
     }
@@ -111,6 +140,8 @@ class SettingsStore(private val context: Context) {
         )
 
         private fun signKey(id: String) = "sign:$id"
+
+        private fun priorityKey(id: String) = "priority:$id"
 
         private fun defaultForCategory(keyName: String): Boolean {
             return SignCatalog.all.firstOrNull { it.categoryKey == keyName }?.defaultEnabled ?: true

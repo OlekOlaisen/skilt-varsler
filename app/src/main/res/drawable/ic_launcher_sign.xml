@@ -1,20 +1,23 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Legacy / pre-26 fallback: full-bleed so masked launchers never show a white frame. -->
+<!-- Car APP_ICON / non-adaptive: same safe-zone mark on ink background. -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp"
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
     <path
-        android:fillColor="#F85B60"
+        android:fillColor="#0B1220"
         android:pathData="M0,0h108v108h-108z" />
     <path
+        android:fillColor="#E11D48"
+        android:pathData="M54,26L82,82H26Z" />
+    <path
         android:fillColor="#FFFFFF"
-        android:pathData="M54,30L78,78H30Z" />
+        android:pathData="M54,42L68,74H40Z" />
     <path
-        android:fillColor="#1A1518"
-        android:pathData="M52,46h4v16h-4z" />
+        android:fillColor="#0B1220"
+        android:pathData="M52,54h4v10h-4z" />
     <path
-        android:fillColor="#1A1518"
-        android:pathData="M52,66h4v5h-4z" />
+        android:fillColor="#0B1220"
+        android:pathData="M52,68h4v3.5h-4z" />
 </vector>

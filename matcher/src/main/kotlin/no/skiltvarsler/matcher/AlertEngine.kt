@@ -105,7 +105,7 @@ class AlertEngine(
             collectRoadworks(fix, alerting, speed)?.let { alerts.add(it) }
             collectAccidents(fix, alerting, speed)?.let { alerts.add(it) }
             pruneFired()
-            return alerts.sortedByDescending { it.kind.priority }.take(maxQueue)
+            return alerts.sortedByDescending { settings.sortWeight(it) }.take(maxQueue)
         }
         refreshHorizon(match, fix.speedMetersPerSecond)
         refreshPriorityStay(match, speed, fix.timeMs)
@@ -181,7 +181,7 @@ class AlertEngine(
 
         rememberMatch(match)
         pruneFired()
-        return alerts.sortedByDescending { it.kind.priority }.take(maxQueue)
+        return alerts.sortedByDescending { settings.sortWeight(it) }.take(maxQueue)
     }
 
     private fun collectRoadworks(fix: GpsFix, alerting: Boolean, speed: Double): Alert? {

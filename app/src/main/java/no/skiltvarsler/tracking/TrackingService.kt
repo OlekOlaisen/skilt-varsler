@@ -215,9 +215,12 @@ class TrackingService : Service() {
         }
         val combineEnabled = alertSettings?.combineAlerts != false
         if (!combineEnabled) {
-            alerts.forEach { alert ->
-                AlertNotifier.publishAlert(this@TrackingService, alert)
-            }
+            // One heads-up per alert: highest priority first, 5s each, then dismiss.
+            AlertNotifier.publishSequential(
+                this@TrackingService,
+                alerts,
+                alertSettings ?: AlertSettings.ALL_ON,
+            )
             return
         }
         pendingCombinedAlerts.addAll(alerts)
@@ -238,7 +241,11 @@ class TrackingService : Service() {
             if (LastAlertStore.alertsMuted) {
                 return@withContext
             }
-            AlertNotifier.publishCombined(this@TrackingService, batch)
+            AlertNotifier.publishCombined(
+                this@TrackingService,
+                batch,
+                alertSettings ?: AlertSettings.ALL_ON,
+            )
         }
     }
 
@@ -386,10 +393,15 @@ class TrackingService : Service() {
     override fun onDestroy() {
         fused.removeLocationUpdates(callback)
         combineFlushJob?.cancel()
-        if (pendingCombinedAlerts.isNotEmpty() && !LastAlertStore.alertsMuted) {
-            val batch = ArrayList(pendingCombinedAlerts)
-            pendingCombinedAlerts.clear()
-            AlertNotifier.publishCombined(this, batch)
+        val pendingCombined = ArrayList(pendingCombinedAlerts)
+        pendingCombinedAlerts.clear()
+        AlertNotifier.resetDisplay(this)
+        if (pendingCombined.isNotEmpty() && !LastAlertStore.alertsMuted) {
+            AlertNotifier.publishCombined(
+                this,
+                pendingCombined,
+                alertSettings ?: AlertSettings.ALL_ON,
+            )
         }
         scope.cancel()
         val summary = TripRecorder.finish()

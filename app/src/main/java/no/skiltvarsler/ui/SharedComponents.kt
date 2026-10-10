@@ -1,22 +1,37 @@
 package no.skiltvarsler.ui
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -26,8 +41,13 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import no.skiltvarsler.matcher.Alert
 import no.skiltvarsler.matcher.AlertKind
+import no.skiltvarsler.matcher.AlertPriority
 import no.skiltvarsler.tilesource.TileCacheTag
 import no.skiltvarsler.tilesource.TileInventoryItem
+
+private val PriorityHighestRed = Color(0xFFD32F2F)
+private val PriorityMediumOrange = Color(0xFFE65100)
+private val PriorityLowGreen = Color(0xFF2E7D32)
 
 private val TileActiveGreen = Color(0xFF3DDC84)
 private val TileUpdatedOrange = Color(0xFFFF9F1A)
@@ -227,24 +247,97 @@ fun ToggleRow(
     kind: AlertKind,
     payload: String = "",
     nvdbId: Long = 0,
+    priorityTier: Int = AlertPriority.defaultTierFor(kind),
     onChange: (Boolean) -> Unit,
+    onPriorityChange: ((Int) -> Unit)? = null,
 ) {
     Row(
         modifier = Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.SpaceBetween,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            TrafficSignImage(
-                kind = kind,
-                payload = payload,
-                nvdbId = nvdbId,
-                size = 48.dp,
-                contentDescription = label,
-            )
-            Spacer(Modifier.width(12.dp))
+        TrafficSignImage(
+            kind = kind,
+            payload = payload,
+            nvdbId = nvdbId,
+            size = 48.dp,
+            contentDescription = label,
+        )
+        Column(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(2.dp),
+        ) {
             Text(label, style = MaterialTheme.typography.bodyLarge)
+            if (onPriorityChange != null) {
+                PriorityTierDropdown(
+                    tier = priorityTier,
+                    onTierChange = onPriorityChange,
+                )
+            }
         }
         Switch(checked = checked, onCheckedChange = onChange)
+    }
+}
+
+@Composable
+private fun PriorityTierDropdown(
+    tier: Int,
+    onTierChange: (Int) -> Unit,
+) {
+    var expanded by remember { mutableStateOf(false) }
+    val selected = AlertPriority.coerce(tier)
+    val label = AlertPriority.label(selected)
+    val accent = priorityAccentColor(selected)
+    Box {
+        OutlinedButton(
+            onClick = { expanded = true },
+            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
+            shape = RoundedCornerShape(8.dp),
+            border = BorderStroke(1.dp, accent),
+            colors = ButtonDefaults.outlinedButtonColors(
+                contentColor = accent,
+            ),
+        ) {
+            Text(
+                "Prioritet: $label",
+                style = MaterialTheme.typography.labelLarge,
+                color = accent,
+            )
+            Spacer(Modifier.width(2.dp))
+            Icon(
+                imageVector = Icons.Filled.ArrowDropDown,
+                contentDescription = "Endre prioritet",
+                tint = accent,
+                modifier = Modifier.size(20.dp),
+            )
+        }
+        DropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false },
+        ) {
+            AlertPriority.ALL_TIERS.forEach { option ->
+                val optionColor = priorityAccentColor(option)
+                DropdownMenuItem(
+                    text = {
+                        Text(
+                            AlertPriority.label(option),
+                            color = optionColor,
+                        )
+                    },
+                    onClick = {
+                        onTierChange(option)
+                        expanded = false
+                    },
+                )
+            }
+        }
+    }
+}
+
+private fun priorityAccentColor(tier: Int): Color {
+    return when (AlertPriority.coerce(tier)) {
+        AlertPriority.HIGHEST, AlertPriority.HIGH -> PriorityHighestRed
+        AlertPriority.MEDIUM -> PriorityMediumOrange
+        else -> PriorityLowGreen
     }
 }

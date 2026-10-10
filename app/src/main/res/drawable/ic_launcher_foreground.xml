@@ -5,16 +5,19 @@
     android:viewportWidth="108"
     android:viewportHeight="108">
     <!--
-      Safe zone for adaptive icons is the center ~66dp.
-      Triangle stays inside that so round / squircle masks never clip the mark.
+      Adaptive-icon safe zone is the center 66×66 dp (margin 21..87).
+      Brand mark stays fully inside that circle so launcher masks never clip it.
     -->
     <path
+        android:fillColor="#E11D48"
+        android:pathData="M54,26L82,82H26Z" />
+    <path
         android:fillColor="#FFFFFF"
-        android:pathData="M54,30L78,78H30Z" />
+        android:pathData="M54,42L68,74H40Z" />
     <path
-        android:fillColor="#1A1518"
-        android:pathData="M52,46h4v16h-4z" />
+        android:fillColor="#0B1220"
+        android:pathData="M52,54h4v10h-4z" />
     <path
-        android:fillColor="#1A1518"
-        android:pathData="M52,66h4v5h-4z" />
+        android:fillColor="#0B1220"
+        android:pathData="M52,68h4v3.5h-4z" />
 </vector>

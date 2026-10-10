@@ -16,6 +16,12 @@ import androidx.car.app.notification.CarNotificationManager
 import androidx.car.app.notification.CarPendingIntent
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import no.skiltvarsler.MainActivity
 import no.skiltvarsler.R
 import no.skiltvarsler.car.SkiltCarAppService
@@ -23,6 +29,7 @@ import no.skiltvarsler.log.DebugLog
 import no.skiltvarsler.matcher.Alert
 import no.skiltvarsler.matcher.AlertCombine
 import no.skiltvarsler.matcher.AlertKind
+import no.skiltvarsler.matcher.AlertSettings
 import no.skiltvarsler.signs.SignRenderer
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicReference
@@ -32,16 +39,28 @@ object AlertNotifier {
     const val CHANNEL_ALERT = "alert"
     const val DRIVING_NOTIFICATION_ID = 10
     const val ALERT_NOTIFICATION_ID = 20
+    /** How long each heads-up stays posted before dismiss or the next queued alert. */
+    const val DISPLAY_SLOT_MS = 5_000L
     private const val ALERT_NOTIFICATION_POOL_SIZE = 16
     private const val SIGN_BITMAP_SIZE_PX = 192
     private const val PHONE_CONTENT_REQUEST_CODE = 0
     private const val CAR_CONTENT_REQUEST_CODE = 10
     private val alertNotificationSequence = AtomicInteger(0)
     private val lastPostedAlert = AtomicReference<PostedAlert?>(null)
+    private val displayScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+    private val displayLock = Any()
+    private val pendingDisplay = ArrayDeque<DisplayItem>()
+    private var displayDrainJob: Job? = null
+    private var showingKey: String? = null
 
     private data class PostedAlert(
         val tag: String,
         val notificationId: Int,
+    )
+
+    private data class DisplayItem(
+        val displayAlert: Alert,
+        val logAlerts: List<Alert>,
     )
 
     fun ensureChannels(context: Context) {
@@ -93,11 +112,36 @@ object AlertNotifier {
             .build()
     }
 
-    fun publishAlert(context: Context, alert: Alert) {
-        publishAlertContent(
+    fun publishAlert(
+        context: Context,
+        alert: Alert,
+        settings: AlertSettings = AlertSettings.ALL_ON,
+    ) {
+        publishSequential(context, listOf(alert), settings)
+    }
+
+    /**
+     * Queues each alert as its own heads-up slot (priority order).
+     * Slot 1 shows for [DISPLAY_SLOT_MS], then slot 2, and so on; each slot is dismissed
+     * before the next posts (or after the last one finishes).
+     */
+    fun publishSequential(
+        context: Context,
+        alerts: List<Alert>,
+        settings: AlertSettings = AlertSettings.ALL_ON,
+    ) {
+        if (alerts.isEmpty()) {
+            return
+        }
+        val ordered = AlertCombine.dedupeAndSort(alerts, settings)
+        enqueueDisplay(
             context = context,
-            displayAlert = alert,
-            logAlerts = listOf(alert),
+            items = ordered.map { alert ->
+                DisplayItem(
+                    displayAlert = alert,
+                    logAlerts = listOf(alert),
+                )
+            },
         )
     }
 
@@ -105,16 +149,117 @@ object AlertNotifier {
      * Publishes one heads-up for one or more near-simultaneous alerts.
      * Multiple alerts become a single title like "Fartsgrense 40 · Forkjørsveg".
      */
-    fun publishCombined(context: Context, alerts: List<Alert>) {
+    fun publishCombined(
+        context: Context,
+        alerts: List<Alert>,
+        settings: AlertSettings = AlertSettings.ALL_ON,
+    ) {
         if (alerts.isEmpty()) {
             return
         }
-        val merged = AlertCombine.merge(alerts)
-        publishAlertContent(
+        val ordered = AlertCombine.dedupeAndSort(alerts, settings)
+        val merged = AlertCombine.merge(ordered, settings)
+        enqueueDisplay(
             context = context,
-            displayAlert = merged,
-            logAlerts = AlertCombine.dedupeAndSort(alerts),
+            items = listOf(
+                DisplayItem(
+                    displayAlert = merged,
+                    logAlerts = ordered,
+                ),
+            ),
         )
+    }
+
+    /**
+     * Cancels the active heads-up and drops any queued slots (e.g. trip end).
+     */
+    fun resetDisplay(context: Context) {
+        synchronized(displayLock) {
+            displayDrainJob?.cancel()
+            displayDrainJob = null
+            pendingDisplay.clear()
+            showingKey = null
+        }
+        dismissCurrentAlert(context)
+    }
+
+    private fun enqueueDisplay(context: Context, items: List<DisplayItem>) {
+        if (items.isEmpty()) {
+            return
+        }
+        val appContext = context.applicationContext
+        synchronized(displayLock) {
+            for (item in items) {
+                val key = displayKey(item.displayAlert)
+                if (showingKey == key) {
+                    continue
+                }
+                if (pendingDisplay.any { pending -> displayKey(pending.displayAlert) == key }) {
+                    continue
+                }
+                pendingDisplay.addLast(item)
+            }
+            if (displayDrainJob?.isActive == true) {
+                return
+            }
+            displayDrainJob = displayScope.launch {
+                drainDisplayQueue(appContext)
+            }
+        }
+    }
+
+    private suspend fun drainDisplayQueue(context: Context) {
+        while (true) {
+            if (LastAlertStore.alertsMuted) {
+                synchronized(displayLock) {
+                    pendingDisplay.clear()
+                    showingKey = null
+                }
+                dismissCurrentAlert(context)
+                break
+            }
+            val item = synchronized(displayLock) {
+                val next = pendingDisplay.removeFirstOrNull()
+                showingKey = next?.let { candidate -> displayKey(candidate.displayAlert) }
+                next
+            } ?: break
+            publishAlertContent(
+                context = context,
+                displayAlert = item.displayAlert,
+                logAlerts = item.logAlerts,
+            )
+            delay(DISPLAY_SLOT_MS)
+            dismissCurrentAlert(context)
+            synchronized(displayLock) {
+                showingKey = null
+            }
+        }
+        synchronized(displayLock) {
+            displayDrainJob = null
+            if (pendingDisplay.isNotEmpty()) {
+                val appContext = context.applicationContext
+                displayDrainJob = displayScope.launch {
+                    drainDisplayQueue(appContext)
+                }
+            }
+        }
+    }
+
+    private fun displayKey(alert: Alert): String {
+        return "${alert.kind}:${alert.nvdbId}:${alert.title}"
+    }
+
+    fun dismissCurrentAlert(context: Context) {
+        try {
+            val manager = CarNotificationManager.from(context)
+            lastPostedAlert.getAndSet(null)?.let { previous ->
+                manager.cancel(previous.tag, previous.notificationId)
+            }
+        } catch (_: SecurityException) {
+            // Notification permission can disappear mid-trip; ignore.
+        } catch (error: Exception) {
+            DebugLog.append("NOTIFY dismiss failed: ${error.message}")
+        }
     }
 
     /**

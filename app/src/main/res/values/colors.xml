@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Car App Library accents (max two brand colors; light + dark variants required). -->
+    <color name="car_color_primary">#F85B60</color>
+    <color name="car_color_primary_dark">#E11D48</color>
+    <color name="car_color_secondary">#F5F5F5</color>
+    <color name="car_color_secondary_dark">#A8B0B8</color>
+</resources>

@@ -40,7 +40,8 @@ import no.skiltvarsler.tracking.TrackingService
 import no.skiltvarsler.tracking.UpcomingSign
 
 private const val CAR_LOG_TAG = "SkiltCarApp"
-private const val UPCOMING_SIGN_BITMAP_SIZE_PX = 128
+/** Design for Driving primary icon tier for IMAGE_TYPE_LARGE list art. */
+private const val PRIMARY_ICON_SIZE_DP = 44
 
 class SkiltCarAppService : CarAppService() {
     override fun onCreate() {
@@ -178,17 +179,23 @@ class StatusScreen(carContext: CarContext) : Screen(carContext) {
     }
 
     private fun signImageFor(sign: UpcomingSign): CarIcon {
+        val sizePx = primaryIconSizePx()
         val bitmap = SignRenderer.bitmap(
             context = carContext,
             kind = sign.kind,
             payload = sign.payload,
             nvdbId = sign.nvdbId,
-            sizePx = UPCOMING_SIGN_BITMAP_SIZE_PX,
+            sizePx = sizePx,
         )
         if (bitmap != null) {
             return CarIcon.Builder(IconCompat.createWithBitmap(bitmap)).build()
         }
         return resourceIcon(AlertNotifier.iconRes(sign.kind))
+    }
+
+    private fun primaryIconSizePx(): Int {
+        val density = carContext.resources.displayMetrics.density
+        return (PRIMARY_ICON_SIZE_DP * density).toInt().coerceAtLeast(PRIMARY_ICON_SIZE_DP)
     }
 
     private fun titleWithDistance(title: String, metersAhead: Int): CharSequence {
@@ -226,14 +233,14 @@ class StatusScreen(carContext: CarContext) : Screen(carContext) {
         // ListTemplate ActionStrip: max 2 actions, only one may have a title, no FLAG_PRIMARY.
         val driveAction = Action.Builder()
             .setTitle(if (tripActive) "Stopp" else "Start")
-            .setIcon(resourceIcon(R.drawable.ic_car_drive))
+            .setIcon(resourceIcon(R.drawable.ic_car_drive_primary))
             .setOnClickListener { toggleDriving() }
             .build()
 
         val muteAction = Action.Builder()
             .setIcon(
                 resourceIcon(
-                    if (muted) R.drawable.ic_car_unmute else R.drawable.ic_car_mute,
+                    if (muted) R.drawable.ic_car_unmute_primary else R.drawable.ic_car_mute_primary,
                 ),
             )
             .setOnClickListener { toggleMute() }

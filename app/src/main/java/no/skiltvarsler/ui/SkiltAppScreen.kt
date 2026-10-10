@@ -5,7 +5,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.BarChart
 import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.Notifications
 import androidx.compose.material.icons.outlined.Settings
@@ -34,12 +33,10 @@ import no.skiltvarsler.settings.SettingsStore
 import no.skiltvarsler.tracking.AlertNotifier
 import no.skiltvarsler.tracking.LastAlertStore
 import no.skiltvarsler.tracking.TestAlerts
-import no.skiltvarsler.tracking.TripRecorder
 
 private enum class AppTab {
     Home,
     Alerts,
-    Stats,
     Settings,
 }
 
@@ -64,8 +61,6 @@ fun SkiltAppScreen(
     val settings by store.settings.collectAsState(initial = AlertSettings.ALL_ON)
     val autoStartTracking by store.autoStartTracking.collectAsState(initial = true)
     val subscription by SubscriptionRepository.state.collectAsState()
-    val lastTripSummary by TripRecorder.lastSummary.collectAsState()
-    val pendingTripSummary by TripRecorder.pendingDisplay.collectAsState()
     val scope = rememberCoroutineScope()
     var selectedTab by remember { mutableStateOf(AppTab.Home) }
     var tripStatus by remember { mutableStateOf(LastAlertStore.trackingStatus()) }
@@ -91,13 +86,6 @@ fun SkiltAppScreen(
             !LastAlertStore.trackingActive
         ) {
             onStartTracking()
-        }
-    }
-
-    LaunchedEffect(pendingTripSummary, lastTripSummary) {
-        if (pendingTripSummary && lastTripSummary != null) {
-            selectedTab = AppTab.Stats
-            TripRecorder.markSummarySeen()
         }
     }
 
@@ -168,15 +156,6 @@ fun SkiltAppScreen(
                     label = { Text("Varsler") },
                 )
                 NavigationBarItem(
-                    selected = selectedTab == AppTab.Stats && !showTestScreen,
-                    onClick = {
-                        showTestScreen = false
-                        selectedTab = AppTab.Stats
-                    },
-                    icon = { Icon(Icons.Outlined.BarChart, contentDescription = "Statistikk") },
-                    label = { Text("Statistikk") },
-                )
-                NavigationBarItem(
                     selected = selectedTab == AppTab.Settings || showTestScreen,
                     onClick = {
                         showTestScreen = false
@@ -229,8 +208,10 @@ fun SkiltAppScreen(
                         onToggleGroup = { group, enabled ->
                             scope.launch { store.setGroupEnabled(group, enabled) }
                         },
+                        onPriorityChange = { id, tier ->
+                            scope.launch { store.setSignPriority(id, tier) }
+                        },
                     )
-                    AppTab.Stats -> StatsScreen(summary = lastTripSummary)
                     AppTab.Settings -> SettingsScreen(
                         alertsMuted = settings.alertsMuted,
                         onAlertsMutedChange = { muted ->

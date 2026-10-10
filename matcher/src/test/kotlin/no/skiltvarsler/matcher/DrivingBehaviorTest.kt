@@ -114,6 +114,43 @@ class DrivingBehaviorTest {
     }
 
     @Test
+    fun roundaboutPlatesOnOtherArmsAreIgnoredOnApproach() {
+        val graph = SyntheticGraph.mainRoadWithRoundaboutArms()
+        val main = graph.sequences.getValue(SyntheticGraph.SEQ_MAIN)
+        val match = Match(
+            linkId = main.links.first().id,
+            sequenceId = main.id,
+            position = 0.80,
+            direction = TravelDirection.MED,
+            snapped = main.links.first().points.last(),
+            distanceToLinkMeters = 0.0,
+        )
+        val found = HorizonScanner(graph).scan(match, speedMetersPerSecond = 12.0)
+        val roundaboutIds = found
+            .filter { candidate -> AlertCopy.isRoundaboutPlate(candidate.obj.payload) }
+            .map { candidate -> candidate.obj.nvdbId }
+        assertThat(roundaboutIds).contains(SyntheticGraph.APPROACH_ROUNDABOUT_ID)
+        assertThat(roundaboutIds).doesNotContain(SyntheticGraph.CONTINUE_ROUNDABOUT_ID)
+        assertThat(roundaboutIds).doesNotContain(SyntheticGraph.SIDE_ROUNDABOUT_ID)
+    }
+
+    @Test
+    fun approachingRoundaboutFiresOnlyOwnArmPlate() {
+        val graph = SyntheticGraph.mainRoadWithRoundaboutArms()
+        val main = graph.sequences.getValue(SyntheticGraph.SEQ_MAIN).links.first()
+        val result = Replay.play(
+            AlertEngine(graph),
+            Replay.alongLink(main, TravelDirection.MED, speedMetersPerSecond = 12.0),
+        )
+        val roundaboutIds = result.alertsOf(AlertKind.HAZARD)
+            .filter { alert -> AlertCopy.isRoundaboutPlate(alert.payload) }
+            .map { alert -> alert.nvdbId }
+        assertThat(roundaboutIds).contains(SyntheticGraph.APPROACH_ROUNDABOUT_ID)
+        assertThat(roundaboutIds).doesNotContain(SyntheticGraph.CONTINUE_ROUNDABOUT_ID)
+        assertThat(roundaboutIds).doesNotContain(SyntheticGraph.SIDE_ROUNDABOUT_ID)
+    }
+
+    @Test
     fun standingStillDoesNotFireCameraOnTheRoadAhead() {
         val graph = SyntheticGraph.e6VestbyLike()
         val moving = Replay.alongLink(

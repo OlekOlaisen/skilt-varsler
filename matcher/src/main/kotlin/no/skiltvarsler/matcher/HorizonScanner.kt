@@ -86,8 +86,10 @@ class HorizonScanner(
     }
 
     /**
-     * Stop and yield apply to the approach you are on. Following a side street into the
-     * horizon must not surface those plates while the car stays on the through road.
+     * Stop, yield and roundabout (406/126) apply to the approach you are on.
+     * Roundabout plates exist on every arm in NVDB — never surface other arms' 406 while
+     * still matched to your approach. Stop/yield may still appear on a near-straight
+     * continuation (small heading delta).
      */
     private fun includeObject(
         obj: RoadObject,
@@ -95,15 +97,28 @@ class HorizonScanner(
         frame: Frame,
         startHeading: Double?,
     ): Boolean {
-        if (obj.type != RoadObjectType.STOP && obj.type != RoadObjectType.YIELD) {
+        if (!isApproachControlSign(obj)) {
             return true
         }
         if (frame.sequenceId == matchedSequenceId) {
             return true
         }
+        if (isRoundaboutHazard(obj)) {
+            return false
+        }
         val pathHeading = frame.travelHeading ?: return false
         val origin = startHeading ?: return false
         return Geo.headingDeltaDegrees(origin, pathHeading) <= junctionControlMaxTurnDegrees
+    }
+
+    private fun isApproachControlSign(obj: RoadObject): Boolean {
+        return obj.type == RoadObjectType.STOP ||
+            obj.type == RoadObjectType.YIELD ||
+            isRoundaboutHazard(obj)
+    }
+
+    private fun isRoundaboutHazard(obj: RoadObject): Boolean {
+        return obj.type == RoadObjectType.HAZARD && AlertCopy.isRoundaboutPlate(obj.payload)
     }
 
     /**

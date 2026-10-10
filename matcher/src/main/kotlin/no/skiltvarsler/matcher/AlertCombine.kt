@@ -7,18 +7,24 @@ package no.skiltvarsler.matcher
 object AlertCombine {
     const val COALESCE_WINDOW_MS = 2_000L
 
-    fun dedupeAndSort(alerts: List<Alert>): List<Alert> {
+    fun dedupeAndSort(
+        alerts: List<Alert>,
+        settings: AlertSettings = AlertSettings.ALL_ON,
+    ): List<Alert> {
         return alerts
             .distinctBy { alert -> "${alert.kind}:${alert.nvdbId}" }
-            .sortedByDescending { alert -> alert.kind.priority }
+            .sortedByDescending { alert -> settings.sortWeight(alert) }
     }
 
     /**
      * Returns a single alert whose title/body join all inputs (priority order).
      * Bitmap/icon consumers should use [Alert.kind] from the highest-priority item.
      */
-    fun merge(alerts: List<Alert>): Alert {
-        val ordered = dedupeAndSort(alerts)
+    fun merge(
+        alerts: List<Alert>,
+        settings: AlertSettings = AlertSettings.ALL_ON,
+    ): Alert {
+        val ordered = dedupeAndSort(alerts, settings)
         require(ordered.isNotEmpty()) { "Cannot merge an empty alert list" }
         if (ordered.size == 1) {
             return ordered.first()

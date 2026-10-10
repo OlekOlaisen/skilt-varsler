@@ -1,8 +1,5 @@
 package no.skiltvarsler.tracking
 
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
 import no.skiltvarsler.matcher.Alert
 import no.skiltvarsler.matcher.AlertCopy
 import no.skiltvarsler.matcher.AlertKind
@@ -10,7 +7,6 @@ import no.skiltvarsler.matcher.GpsFix
 import no.skiltvarsler.matcher.ObjectPayload
 import no.skiltvarsler.tiles.Geo
 import no.skiltvarsler.tiles.LatLon
-import kotlin.math.roundToInt
 
 data class TollPassage(
     val name: String,
@@ -49,31 +45,13 @@ data class TripSummary(
 }
 
 /**
- * Accumulates what happened during an active drive for the end-of-trip summary screen.
+ * Accumulates what happened during an active drive for debug / trip-stop logging.
  */
 object TripRecorder {
     private val lock = Any()
     private var active: TripBuilder? = null
-    private val lastSummaryState = MutableStateFlow<TripSummary?>(null)
-    private val pendingDisplayState = MutableStateFlow(false)
-
-    val lastSummary: StateFlow<TripSummary?> = lastSummaryState.asStateFlow()
-
-    /** True after a trip ends until the summary screen has been opened once. */
-    val pendingDisplay: StateFlow<Boolean> = pendingDisplayState.asStateFlow()
-
-    fun currentSummary(): TripSummary? = lastSummaryState.value
 
     fun isRecording(): Boolean = synchronized(lock) { active != null }
-
-    fun markSummarySeen() {
-        pendingDisplayState.value = false
-    }
-
-    fun clearSummary() {
-        lastSummaryState.value = null
-        pendingDisplayState.value = false
-    }
 
     fun start(nowMs: Long = System.currentTimeMillis()) {
         synchronized(lock) {
@@ -104,16 +82,11 @@ object TripRecorder {
     }
 
     fun finish(nowMs: Long = System.currentTimeMillis()): TripSummary? {
-        val summary = synchronized(lock) {
+        return synchronized(lock) {
             val builder = active ?: return@synchronized null
             active = null
             builder.build(endedAtMs = nowMs)
         }
-        if (summary != null) {
-            lastSummaryState.value = summary
-            pendingDisplayState.value = true
-        }
-        return summary
     }
 
     private class TripBuilder(
@@ -225,41 +198,5 @@ object TripRecorder {
                 ?.toDoubleOrNull()
             return TollPassage(name = name, kroner = kroner, nvdbId = alert.nvdbId)
         }
-    }
-}
-
-fun TripSummary.distanceLabel(): String {
-    return if (distanceMeters >= 1000.0) {
-        val km = distanceMeters / 1000.0
-        String.format(java.util.Locale("nb", "NO"), "%.1f km", km)
-    } else {
-        "${distanceMeters.roundToInt()} m"
-    }
-}
-
-fun TripSummary.durationLabel(): String {
-    val totalSeconds = (durationMs / 1000L).toInt().coerceAtLeast(0)
-    val hours = totalSeconds / 3600
-    val minutes = (totalSeconds % 3600) / 60
-    val seconds = totalSeconds % 60
-    return when {
-        hours > 0 -> String.format(java.util.Locale("nb", "NO"), "%d t %d min", hours, minutes)
-        minutes > 0 -> String.format(java.util.Locale("nb", "NO"), "%d min %d s", minutes, seconds)
-        else -> "$seconds s"
-    }
-}
-
-fun TripSummary.tollKronerLabel(): String {
-    if (tolls.none { it.kroner != null }) {
-        return "—"
-    }
-    val amount = tollKronerTotal
-    val ore = (amount * 100.0).toLong()
-    val kroner = ore / 100
-    val remainder = (ore % 100).toInt()
-    return if (remainder == 0) {
-        "$kroner kr"
-    } else {
-        String.format(java.util.Locale("nb", "NO"), "%d,%02d kr", kroner, remainder)
     }
 }

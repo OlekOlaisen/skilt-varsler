@@ -245,6 +245,15 @@ object AlertCopy {
         return code.startsWith("208")
     }
 
+    /** N300 påbud 406 / fare 126 — approach plates, one per roundabout arm. */
+    fun isRoundaboutPlate(payload: String): Boolean {
+        val number = SignCatalog.normalizeNumber(payload)
+        return number == "406" ||
+            number.startsWith("406.") ||
+            number == "126" ||
+            number.startsWith("126.")
+    }
+
     private fun formatKroner(amount: Double): String {
         val ore = (amount * 100.0).roundToLong()
         val kroner = ore / 100

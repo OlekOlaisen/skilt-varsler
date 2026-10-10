@@ -53,6 +53,10 @@
             android:name="androidx.car.app.minCarApiLevel"
             android:value="6" />
 
+        <meta-data
+            android:name="androidx.car.app.theme"
+            android:resource="@style/CarAppTheme" />
+
         <service
             android:name=".car.SkiltCarAppService"
             android:exported="true"

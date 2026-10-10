@@ -78,11 +78,48 @@ class AlertCombineTest {
         assertThat(ordered.single().body).isEqualTo("Om 10 m")
     }
 
+    @Test
+    fun userPriorityOverrideCanRaiseSpeedAboveYield() {
+        val speed = alert(
+            kind = AlertKind.SPEED_LIMIT,
+            nvdbId = 50L,
+            title = "Fartsgrense 50",
+            body = "50 km/t",
+            payload = "50",
+        )
+        val yield = alert(
+            kind = AlertKind.YIELD,
+            nvdbId = 202L,
+            title = "Vikeplikt",
+            body = "",
+            payload = "202",
+        )
+        val defaults = AlertCombine.dedupeAndSort(listOf(speed, yield))
+        assertThat(defaults.first().kind).isEqualTo(AlertKind.YIELD)
+
+        val settings = AlertSettings(
+            priorityOverrides = mapOf("speed:50" to AlertPriority.HIGHEST),
+        )
+        val overridden = AlertCombine.dedupeAndSort(listOf(speed, yield), settings)
+        assertThat(overridden.first().kind).isEqualTo(AlertKind.SPEED_LIMIT)
+    }
+
+    @Test
+    fun unsetPriorityUsesCatalogDefaultFoundation() {
+        val settings = AlertSettings()
+        assertThat(settings.priorityTierForId("stop")).isEqualTo(AlertPriority.HIGHEST)
+        assertThat(settings.priorityTierForId("speed:50")).isEqualTo(AlertPriority.MEDIUM)
+        assertThat(settings.priorityTierForId("hazard:406")).isEqualTo(AlertPriority.MEDIUM)
+        assertThat(settings.priorityTierForId("municipality")).isEqualTo(AlertPriority.LOWEST)
+        assertThat(settings.hasPriorityOverride("speed:50")).isFalse()
+    }
+
     private fun alert(
         kind: AlertKind,
         nvdbId: Long,
         title: String,
         body: String,
+        payload: String = "",
     ): Alert {
         return Alert(
             kind = kind,
@@ -92,7 +129,7 @@ class AlertCombineTest {
             body = body,
             sequenceId = 1L,
             objectType = RoadObjectType.PRIORITY_ROAD,
-            payload = "",
+            payload = payload,
         )
     }
 }

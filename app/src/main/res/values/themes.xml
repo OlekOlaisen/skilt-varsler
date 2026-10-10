@@ -1,7 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
 <resources>
     <style name="Theme.SkiltVarsler" parent="android:Theme.Material.NoActionBar">
         <item name="android:statusBarColor">#FF1A1518</item>
         <item name="android:navigationBarColor">#FF1A1518</item>
         <item name="android:windowBackground">#FF1A1518</item>
+    </style>
+
+    <!--
+      Android Auto / AAOS brand accents only — host owns surfaces for day/night.
+      Attrs come from androidx.car.app.
+    -->
+    <style name="CarAppTheme">
+        <item name="carColorPrimary">@color/car_color_primary</item>
+        <item name="carColorPrimaryDark">@color/car_color_primary_dark</item>
+        <item name="carColorSecondary">@color/car_color_secondary</item>
+        <item name="carColorSecondaryDark">@color/car_color_secondary_dark</item>
     </style>
 </resources>

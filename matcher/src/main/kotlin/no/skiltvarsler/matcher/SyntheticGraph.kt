@@ -162,6 +162,9 @@ object SyntheticGraph {
 
     const val SIDE_STOP_ID = 910006L
     const val SIDE_YIELD_ID = 910007L
+    const val APPROACH_ROUNDABOUT_ID = 910010L
+    const val CONTINUE_ROUNDABOUT_ID = 910011L
+    const val SIDE_ROUNDABOUT_ID = 910012L
     const val SEQ_SPEED_PLATE = 420L
     const val SPEED_PLATE_40_ID = 910040L
     const val CONTINUE_SPEED_PLATE_40_ID = 910041L
@@ -171,6 +174,18 @@ object SyntheticGraph {
 
     fun mainRoadWithSideStreet(): RoadGraph {
         return junctionGraph(sideBearingDegrees = 90.0, includeJunctionControl = false)
+    }
+
+    /**
+     * Approach (MAIN) plus other-arm 406 plates on CONTINUE and SIDE — models NVDB
+     * putting one roundabout plate on every arm of the same junction.
+     */
+    fun mainRoadWithRoundaboutArms(): RoadGraph {
+        return junctionGraph(
+            sideBearingDegrees = 45.0,
+            includeJunctionControl = false,
+            includeRoundaboutArms = true,
+        )
     }
 
     /** Same junction as [mainRoadWithSideStreet], plus a repeated 40 plate on the continue link. */
@@ -418,6 +433,7 @@ object SyntheticGraph {
         continuePriorityStretch: Boolean = false,
         sideHasSpeed: Boolean = true,
         continueSpeedPlate: Boolean = false,
+        includeRoundaboutArms: Boolean = false,
     ): RoadGraph {
         val junction = Geo.offsetMeters(origin, northMeters = MAIN_LENGTH_METERS, eastMeters = 0.0)
         val northEnd = Geo.offsetMeters(junction, northMeters = MAIN_LENGTH_METERS, eastMeters = 0.0)
@@ -583,6 +599,41 @@ object SyntheticGraph {
                     toPos = 8.0 / SIDE_LENGTH_METERS,
                     direction = TravelDirection.MED,
                     payload = "202",
+                ),
+            )
+        }
+        if (includeRoundaboutArms) {
+            builder.addObject(
+                RoadObject(
+                    nvdbId = APPROACH_ROUNDABOUT_ID,
+                    type = RoadObjectType.HAZARD,
+                    sequenceId = SEQ_MAIN,
+                    fromPos = 350.0 / MAIN_LENGTH_METERS,
+                    toPos = 350.0 / MAIN_LENGTH_METERS,
+                    direction = TravelDirection.MED,
+                    payload = "406",
+                ),
+            )
+            builder.addObject(
+                RoadObject(
+                    nvdbId = CONTINUE_ROUNDABOUT_ID,
+                    type = RoadObjectType.HAZARD,
+                    sequenceId = SEQ_CONTINUE,
+                    fromPos = 40.0 / MAIN_LENGTH_METERS,
+                    toPos = 40.0 / MAIN_LENGTH_METERS,
+                    direction = TravelDirection.MED,
+                    payload = "406",
+                ),
+            )
+            builder.addObject(
+                RoadObject(
+                    nvdbId = SIDE_ROUNDABOUT_ID,
+                    type = RoadObjectType.HAZARD,
+                    sequenceId = SEQ_SIDE,
+                    fromPos = 40.0 / SIDE_LENGTH_METERS,
+                    toPos = 40.0 / SIDE_LENGTH_METERS,
+                    direction = TravelDirection.MED,
+                    payload = "406",
                 ),
             )
         }

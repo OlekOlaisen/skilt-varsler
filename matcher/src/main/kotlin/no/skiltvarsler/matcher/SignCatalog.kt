@@ -8,6 +8,8 @@ data class SignOption(
     val nvdbId: Long = 0,
     val categoryKey: String,
     val defaultEnabled: Boolean = true,
+    /** User-facing tier 1 (Høyest) … 5 (Lavest). Overridden sparsely in settings. */
+    val defaultPriorityTier: Int = AlertPriority.defaultTierFor(kind),
 )
 
 data class SignGroup(
@@ -161,6 +163,21 @@ object SignCatalog {
 
     fun defaultEnabled(id: String): Boolean = byId[id]?.defaultEnabled ?: true
 
+    fun defaultPriorityTier(id: String): Int {
+        byId[id]?.let { option -> return option.defaultPriorityTier }
+        return when {
+            id.startsWith("speed:") -> AlertPriority.defaultTierFor(AlertKind.SPEED_LIMIT)
+            id.startsWith("wildlife:") -> AlertPriority.defaultTierFor(AlertKind.WILDLIFE)
+            id.startsWith("hazard:") -> AlertPriority.defaultTierFor(AlertKind.HAZARD)
+            else -> AlertPriority.MEDIUM
+        }
+    }
+
+    fun defaultPriorityTier(kind: AlertKind, payload: String = ""): Int {
+        val id = optionId(kind, payload)
+        return byId[id]?.defaultPriorityTier ?: AlertPriority.defaultTierFor(kind)
+    }
+
     private fun hazard(number: String, label: String): SignOption {
         return SignOption(
             id = "hazard:$number",
@@ -168,6 +185,11 @@ object SignCatalog {
             label = label,
             payload = number,
             categoryKey = "hazard",
+            defaultPriorityTier = if (number == "406") {
+                AlertPriority.MEDIUM
+            } else {
+                AlertPriority.defaultTierFor(AlertKind.HAZARD)
+            },
         )
     }
 
