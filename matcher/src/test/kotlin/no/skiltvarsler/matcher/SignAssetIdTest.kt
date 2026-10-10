@@ -84,6 +84,12 @@ class SignAssetIdTest {
             .contains("150_0.svg")
         assertThat(SignAssetId.candidates(AlertKind.HAZARD, "138.1", 1L).first())
             .isEqualTo("138_1.svg")
+        assertThat(SignAssetId.candidates(AlertKind.HAZARD, "406", 1L))
+            .contains("406_0.svg")
+        assertThat(SignAssetId.candidates(AlertKind.HAZARD, "126", 1L).first())
+            .isEqualTo("406.svg")
+        assertThat(SignAssetId.candidates(AlertKind.HAZARD, "126", 1L))
+            .contains("406_0.svg")
         assertThat(SignAssetId.candidates(AlertKind.HAZARD, "110", 1L))
             .contains("110_0.svg")
     }

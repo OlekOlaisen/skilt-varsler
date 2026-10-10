@@ -56,6 +56,7 @@ object SignLabel {
         "122" to "Tunnel",
         "124" to "Farlig vegkryss",
         "126" to "Rundkjøring",
+        "406" to "Rundkjøring",
         "132" to "Trafikklyssignal",
         "134" to "Planovergang med bom",
         "135" to "Planovergang uten bom",

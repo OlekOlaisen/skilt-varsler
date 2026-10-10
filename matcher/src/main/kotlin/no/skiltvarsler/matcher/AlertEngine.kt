@@ -314,8 +314,10 @@ class AlertEngine(
     }
 
     /**
-     * Speed limits alert only when the matched limit changes (enter), or when turning onto
-     * another road that still has the same number. Never foreshadow an upcoming zone.
+     * Speed limits alert when the matched limit changes (enter), or when turning onto
+     * another road that still has the same number. With [AlertSettings.repeatReminderSigns],
+     * continuing onto a new sequence with the same number also reconfirms. Never foreshadow
+     * an upcoming zone.
      *
      * Links without NVDB speed (typical roundabout connectors) must not clear [lastSpeedKmh]:
      * otherwise exiting onto a signed road with the same number never re-alerts.
@@ -336,11 +338,19 @@ class AlertEngine(
             return speedAlert(match, currentKmh, 0.0, match.position)
         }
         // Turning onto a different road: confirm the limit even when the number is unchanged.
-        if (previousSequenceId != null &&
-            previousDirection != null &&
-            isTurnOntoNewRoad(previousSequenceId, previousDirection, match)
-        ) {
-            return speedAlert(match, currentKmh, 0.0, match.position)
+        // With repeatReminderSigns, also reconfirm when continuing onto a new sequence
+        // that still carries the same number (reminder plates / sequence splits).
+        if (previousSequenceId != null && previousDirection != null) {
+            val turnedOntoNewRoad = isTurnOntoNewRoad(
+                previousSequenceId,
+                previousDirection,
+                match,
+            )
+            val continuedOntoNewSequence = settings.repeatReminderSigns &&
+                previousSequenceId != match.sequenceId
+            if (turnedOntoNewRoad || continuedOntoNewSequence) {
+                return speedAlert(match, currentKmh, 0.0, match.position)
+            }
         }
         return null
     }
@@ -370,7 +380,7 @@ class AlertEngine(
             if (!insideInterval(match.position, obj)) continue
             inside.add(obj.nvdbId)
             if (!driving || !settings.enabled(AlertKind.PRIORITY_ROAD, obj.payload)) continue
-            if (!priorityStay.allowAlert()) continue
+            if (!settings.repeatReminderSigns && !priorityStay.allowAlert()) continue
             if (obj.nvdbId in lastInsidePriority) continue
             val key = fireKey(AlertKind.PRIORITY_ROAD, obj.nvdbId)
             if (!fired.add(key)) continue
@@ -396,7 +406,10 @@ class AlertEngine(
      * not tens of metres ahead. Uses match geometry directly — horizon skips sub-metre hits.
      */
     private fun collectPriorityAtPlate(match: Match, driving: Boolean): Alert? {
-        if (!driving || !priorityStay.allowAlert()) {
+        if (!driving) {
+            return null
+        }
+        if (!settings.repeatReminderSigns && !priorityStay.allowAlert()) {
             return null
         }
         val sequence = graph.sequences[match.sequenceId] ?: return null

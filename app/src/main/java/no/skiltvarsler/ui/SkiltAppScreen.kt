@@ -240,6 +240,10 @@ fun SkiltAppScreen(
                         onCombineAlertsChange = { enabled ->
                             scope.launch { store.setCombineAlerts(enabled) }
                         },
+                        repeatReminderSigns = settings.repeatReminderSigns,
+                        onRepeatReminderSignsChange = { enabled ->
+                            scope.launch { store.setRepeatReminderSigns(enabled) }
+                        },
                         autoStartTracking = autoStartTracking,
                         onAutoStartTrackingChange = { enabled ->
                             scope.launch { store.setAutoStartTracking(enabled) }

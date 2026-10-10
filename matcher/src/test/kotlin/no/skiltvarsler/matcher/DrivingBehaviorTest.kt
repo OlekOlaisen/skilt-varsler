@@ -347,6 +347,27 @@ class DrivingBehaviorTest {
     }
 
     @Test
+    fun continuingStraightOnPriorityRealertsWhenRepeatReminderSignsEnabled() {
+        val graph = SyntheticGraph.priorityRoadWithSideAndContinueStretches(continueHasPriority = true)
+        val main = graph.sequences.getValue(SyntheticGraph.SEQ_MAIN).links.first()
+        val continueLink = graph.sequences.getValue(SyntheticGraph.SEQ_CONTINUE).links.first()
+        val alongMain = Replay.alongLink(main, TravelDirection.MED, speedMetersPerSecond = 15.0)
+        val alongContinue = Replay.alongLink(
+            continueLink,
+            TravelDirection.MED,
+            speedMetersPerSecond = 15.0,
+            startTimeMs = alongMain.last().timeMs + 1_000L,
+        )
+        val engine = AlertEngine(graph, AlertSettings(repeatReminderSigns = true))
+        val result = Replay.play(engine, alongMain + alongContinue)
+        val priorityIds = result.alertsOf(AlertKind.PRIORITY_ROAD).map { it.nvdbId }
+        assertThat(priorityIds).containsExactly(
+            SyntheticGraph.MAIN_PRIORITY_STRETCH_ID,
+            SyntheticGraph.CONTINUE_PRIORITY_STRETCH_ID,
+        ).inOrder()
+    }
+
+    @Test
     fun turningOntoSideStreetReconfirmsSameSpeedLimit() {
         val graph = SyntheticGraph.mainRoadWithSideStreet()
         val main = graph.sequences.getValue(SyntheticGraph.SEQ_MAIN).links.first()
@@ -406,6 +427,27 @@ class DrivingBehaviorTest {
         val limitsOnContinue = result.alertsOf(AlertKind.SPEED_LIMIT)
             .filter { it.sequenceId == SyntheticGraph.SEQ_CONTINUE }
         assertThat(limitsOnContinue).isEmpty()
+    }
+
+    @Test
+    fun continuingStraightThroughJunctionReconfirmsSameSpeedWhenRepeatReminderSignsEnabled() {
+        val graph = SyntheticGraph.mainRoadWithSideStreet()
+        val main = graph.sequences.getValue(SyntheticGraph.SEQ_MAIN).links.first()
+        val continueLink = graph.sequences.getValue(SyntheticGraph.SEQ_CONTINUE).links.first()
+        val alongMain = Replay.alongLink(main, TravelDirection.MED, speedMetersPerSecond = 12.0)
+        val alongContinue = Replay.alongLink(
+            continueLink,
+            TravelDirection.MED,
+            speedMetersPerSecond = 12.0,
+            startTimeMs = alongMain.last().timeMs + 1_000L,
+        )
+        val engine = AlertEngine(graph, AlertSettings(repeatReminderSigns = true))
+        val result = Replay.play(engine, alongMain + alongContinue)
+        val limitsOnContinue = result.alertsOf(AlertKind.SPEED_LIMIT)
+            .filter { it.sequenceId == SyntheticGraph.SEQ_CONTINUE }
+        assertThat(limitsOnContinue).isNotEmpty()
+        assertThat(limitsOnContinue.first().payload).isEqualTo("40")
+        assertThat(limitsOnContinue.first().metersAhead).isEqualTo(0.0)
     }
 
     @Test

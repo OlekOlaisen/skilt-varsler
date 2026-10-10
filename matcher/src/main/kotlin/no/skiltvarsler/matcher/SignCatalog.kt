@@ -57,7 +57,8 @@ object SignCatalog {
         hazard("120", "Kai, strand eller ferjeleie"),
         hazard("122", "Tunnel"),
         hazard("124", "Farlig vegkryss"),
-        hazard("126", "Rundkjøring"),
+        // N300 påbudsskilt 406 (blått rundkjøringsskilt). Fareskilt 126 aliases to this.
+        hazard("406", "Rundkjøring"),
         hazard("132", "Trafikklyssignal"),
         hazard("134", "Planovergang med bom"),
         hazard("135", "Planovergang uten bom"),
@@ -194,6 +195,10 @@ object SignCatalog {
     private fun hazardId(payload: String): String {
         val number = normalizeNumber(payload)
         if (number.startsWith("146")) return wildlifeId(payload)
+        // Warning plate 126 and mandatory plate 406 are the same toggle / artwork (406_0).
+        if (number == "126" || number.startsWith("126.")) {
+            return "hazard:406"
+        }
         val exact = "hazard:$number"
         if (byId.containsKey(exact)) return exact
         val major = number.substringBefore('.')

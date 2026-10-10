@@ -85,5 +85,16 @@ class SignCatalogTest {
         assertThat(byPayload["150"]).isEqualTo("Fly")
         assertThat(byPayload["153"]).isEqualTo("Trafikkulykke")
         assertThat(byPayload["155"]).isEqualTo("Ridende")
+        assertThat(byPayload["406"]).isEqualTo("Rundkjøring")
+        assertThat(byPayload.containsKey("126")).isFalse()
+    }
+
+    @Test
+    fun roundaboutWarningPlateSharesMandatoryToggle() {
+        val off = AlertSettings(byId = mapOf("hazard:406" to false))
+        assertThat(off.enabled(AlertKind.HAZARD, "406")).isFalse()
+        assertThat(off.enabled(AlertKind.HAZARD, "126")).isFalse()
+        val on = AlertSettings(byId = mapOf("hazard:406" to true))
+        assertThat(on.enabled(AlertKind.HAZARD, "126")).isTrue()
     }
 }

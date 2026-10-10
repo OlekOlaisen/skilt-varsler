@@ -30,6 +30,8 @@ fun SettingsScreen(
     onAlertsMutedChange: (Boolean) -> Unit,
     combineAlerts: Boolean,
     onCombineAlertsChange: (Boolean) -> Unit,
+    repeatReminderSigns: Boolean,
+    onRepeatReminderSignsChange: (Boolean) -> Unit,
     autoStartTracking: Boolean,
     onAutoStartTrackingChange: (Boolean) -> Unit,
     subscription: SubscriptionState,
@@ -70,6 +72,12 @@ fun SettingsScreen(
                 subtitle = "Flere skilt samtidig i ett varsel",
                 checked = combineAlerts,
                 onCheckedChange = onCombineAlertsChange,
+            )
+            SettingSwitch(
+                title = "Gjentatte skilt",
+                subtitle = "Varsle forkjørsveg og fartsgrense også når skiltet gjentas",
+                checked = repeatReminderSigns,
+                onCheckedChange = onRepeatReminderSignsChange,
             )
         }
         SubscriptionCard(

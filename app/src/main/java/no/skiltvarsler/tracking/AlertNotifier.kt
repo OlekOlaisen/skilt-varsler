@@ -24,15 +24,25 @@ import no.skiltvarsler.matcher.Alert
 import no.skiltvarsler.matcher.AlertCombine
 import no.skiltvarsler.matcher.AlertKind
 import no.skiltvarsler.signs.SignRenderer
+import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.atomic.AtomicReference
 
 object AlertNotifier {
     const val CHANNEL_DRIVING = "driving_local"
     const val CHANNEL_ALERT = "alert"
     const val DRIVING_NOTIFICATION_ID = 10
     const val ALERT_NOTIFICATION_ID = 20
+    private const val ALERT_NOTIFICATION_POOL_SIZE = 16
     private const val SIGN_BITMAP_SIZE_PX = 192
     private const val PHONE_CONTENT_REQUEST_CODE = 0
     private const val CAR_CONTENT_REQUEST_CODE = 10
+    private val alertNotificationSequence = AtomicInteger(0)
+    private val lastPostedAlert = AtomicReference<PostedAlert?>(null)
+
+    private data class PostedAlert(
+        val tag: String,
+        val notificationId: Int,
+    )
 
     fun ensureChannels(context: Context) {
         val manager = context.getSystemService(NotificationManager::class.java)
@@ -120,23 +130,30 @@ object AlertNotifier {
         logAlerts.forEach { alert -> DebugLog.appendAlert(alert) }
         val icon = iconRes(displayAlert.kind)
         val titleText = displayAlert.title
+        // Secondary must carry info only — never echo the title (Android Auto HUN looks broken).
         val subtitleText = displayAlert.body
+            .takeIf { body -> body.isNotBlank() && !body.equals(titleText, ignoreCase = true) }
+            .orEmpty()
         val sign = signBitmap(context, displayAlert, icon)
         val customView = alertRemoteViews(context, titleText, subtitleText, sign)
         val builder = NotificationCompat.Builder(context, CHANNEL_ALERT)
             .setSmallIcon(icon)
             .setContentTitle(titleText)
             .setContentText(subtitleText.ifBlank { null })
-            .setStyle(
-                NotificationCompat.BigTextStyle()
+            .apply {
+                val bigTextStyle = NotificationCompat.BigTextStyle()
                     .setBigContentTitle(titleText)
-                    .bigText(subtitleText.ifBlank { titleText }),
-            )
+                if (subtitleText.isNotBlank()) {
+                    bigTextStyle.bigText(subtitleText)
+                }
+                setStyle(bigTextStyle)
+            }
             .setLargeIcon(sign)
             .setCustomContentView(customView)
             .setCustomBigContentView(customView)
             .setCustomHeadsUpContentView(customView)
             .setShowWhen(false)
+            .setOnlyAlertOnce(false)
             .setCategory(NotificationCompat.CATEGORY_STATUS)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setDefaults(NotificationCompat.DEFAULT_VIBRATE)
@@ -145,12 +162,32 @@ object AlertNotifier {
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
             .extend(carAppExtender(context, titleText, subtitleText, icon, sign))
         try {
-            CarNotificationManager.from(context).notify(ALERT_NOTIFICATION_ID, builder)
+            // Android Auto suppresses a new heads-up when the same (tag, id) is updated while a
+            // HUN is still visible. Cancel the previous alert and post a fresh key each time.
+            val manager = CarNotificationManager.from(context)
+            lastPostedAlert.getAndSet(null)?.let { previous ->
+                manager.cancel(previous.tag, previous.notificationId)
+            }
+            val postedAlert = PostedAlert(
+                tag = alertNotificationTag(displayAlert),
+                notificationId = nextAlertNotificationId(),
+            )
+            lastPostedAlert.set(postedAlert)
+            manager.notify(postedAlert.tag, postedAlert.notificationId, builder)
         } catch (error: SecurityException) {
             DebugLog.append("NOTIFY permission denied")
         } catch (error: Exception) {
             DebugLog.append("NOTIFY car failed: ${error.message}")
         }
+    }
+
+    private fun nextAlertNotificationId(): Int {
+        val slot = alertNotificationSequence.getAndIncrement().mod(ALERT_NOTIFICATION_POOL_SIZE)
+        return ALERT_NOTIFICATION_ID + slot
+    }
+
+    private fun alertNotificationTag(alert: Alert): String {
+        return "alert-${alert.sequenceId}-${alert.nvdbId}-${alert.kind.name}"
     }
 
     private fun signBitmap(context: Context, alert: Alert, icon: Int): Bitmap {
@@ -195,14 +232,16 @@ object AlertNotifier {
         icon: Int,
         sign: Bitmap,
     ): CarAppExtender {
-        return CarAppExtender.Builder()
+        val extender = CarAppExtender.Builder()
             .setContentTitle(titleText)
-            .setContentText(subtitleText.ifBlank { titleText })
             .setSmallIcon(icon)
             .setLargeIcon(sign)
             .setImportance(NotificationManager.IMPORTANCE_HIGH)
             .setContentIntent(carAppContentIntent(context))
-            .build()
+        if (subtitleText.isNotBlank()) {
+            extender.setContentText(subtitleText)
+        }
+        return extender.build()
     }
 
     private fun phoneContentIntent(context: Context): PendingIntent {

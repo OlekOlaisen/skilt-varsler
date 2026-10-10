@@ -27,6 +27,7 @@ class SettingsStore(private val context: Context) {
             categoryFallback = categoryFallback,
             alertsMuted = prefs[Keys.alertsMuted] ?: false,
             combineAlerts = prefs[Keys.combineAlerts] ?: true,
+            repeatReminderSigns = prefs[Keys.repeatReminderSigns] ?: false,
         )
     }
 
@@ -64,6 +65,12 @@ class SettingsStore(private val context: Context) {
         }
     }
 
+    suspend fun setRepeatReminderSigns(enabled: Boolean) {
+        context.dataStore.edit { prefs ->
+            prefs[Keys.repeatReminderSigns] = enabled
+        }
+    }
+
     suspend fun setAutoStartTracking(enabled: Boolean) {
         context.dataStore.edit { prefs ->
             prefs[Keys.autoStartTracking] = enabled
@@ -73,6 +80,7 @@ class SettingsStore(private val context: Context) {
     private object Keys {
         val alertsMuted = booleanPreferencesKey("alertsMuted")
         val combineAlerts = booleanPreferencesKey("combineAlerts")
+        val repeatReminderSigns = booleanPreferencesKey("repeatReminderSigns")
         val autoStartTracking = booleanPreferencesKey("autoStartTracking")
     }
 

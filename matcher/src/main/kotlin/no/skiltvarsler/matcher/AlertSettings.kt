@@ -5,6 +5,11 @@ data class AlertSettings(
     val categoryFallback: Map<String, Boolean> = emptyMap(),
     val alertsMuted: Boolean = false,
     val combineAlerts: Boolean = true,
+    /**
+     * When true, also alert for reminder forkjørsveg plates and same-number speed limits
+     * along a continuing stretch (normally silenced after the first confirmation).
+     */
+    val repeatReminderSigns: Boolean = false,
 ) {
     fun enabled(kind: AlertKind, payload: String = ""): Boolean {
         val id = SignCatalog.optionId(kind, payload)

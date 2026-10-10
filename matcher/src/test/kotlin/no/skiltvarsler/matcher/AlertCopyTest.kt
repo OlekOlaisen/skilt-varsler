@@ -29,8 +29,10 @@ class AlertCopyTest {
     }
 
     @Test
-    fun onlyAtkAlertsIncludeApproachDistance() {
+    fun approachDistanceGoesInSecondaryTextForCameraAndRailway() {
         assertThat(AlertCopy.bodyFor(AlertKind.SPEED_CAMERA, 220.0)).isEqualTo("Om 220 m")
+        assertThat(AlertCopy.titleFor(AlertKind.RAILWAY, "134")).isEqualTo("Jernbane")
+        assertThat(AlertCopy.bodyFor(AlertKind.RAILWAY, 180.0, "134")).isEqualTo("Om 180 m")
         assertThat(AlertCopy.bodyFor(AlertKind.SECTION_ATK_START, 300.0)).isEqualTo("")
         assertThat(AlertCopy.bodyFor(AlertKind.SECTION_ATK_END, 90.0)).isEqualTo("")
         assertThat(AlertCopy.showsApproachDistance(AlertKind.SECTION_ATK_START)).isFalse()
@@ -38,12 +40,17 @@ class AlertCopyTest {
         assertThat(AlertCopy.bodyFor(AlertKind.YIELD, 40.0)).isEqualTo("Ved skiltet")
         assertThat(AlertCopy.bodyFor(AlertKind.PRIORITY_ROAD, 15.0, "206")).isEqualTo("")
         assertThat(AlertCopy.showsApproachDistance(AlertKind.SPEED_CAMERA)).isTrue()
+        assertThat(AlertCopy.showsApproachDistance(AlertKind.RAILWAY)).isTrue()
         assertThat(AlertCopy.showsApproachDistance(AlertKind.HAZARD)).isFalse()
     }
 
     @Test
-    fun ferryAndSectionAtkUseNames() {
-        assertThat(AlertCopy.titleFor(AlertKind.FERRY, "775|Moss–Horten")).isEqualTo("Moss–Horten")
+    fun ferryKeepsGenericTitleAndRouteNameInBody() {
+        assertThat(AlertCopy.titleFor(AlertKind.FERRY, "775|Moss–Horten")).isEqualTo("Ferje")
+        assertThat(AlertCopy.bodyFor(AlertKind.FERRY, 180.0, "775|Moss–Horten"))
+            .isEqualTo("Moss–Horten")
+        assertThat(AlertCopy.titleFor(AlertKind.FERRY, "FERRY")).isEqualTo("Ferje")
+        assertThat(AlertCopy.bodyFor(AlertKind.FERRY, 120.0, "FERRY")).isEqualTo("")
         assertThat(AlertCopy.titleFor(AlertKind.SECTION_ATK_START, "556.2|Lærdalstunnelen"))
             .isEqualTo("Streknings-ATK")
         assertThat(AlertCopy.bodyFor(AlertKind.SECTION_ATK_START, 180.0, "556.2|Lærdalstunnelen"))

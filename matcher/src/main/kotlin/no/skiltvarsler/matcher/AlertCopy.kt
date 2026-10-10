@@ -93,7 +93,7 @@ object AlertCopy {
             AlertKind.SPEED_CAMERA -> "Fotoboks"
             AlertKind.TOLL -> namedOrFallback(parsed, "Bomstasjon")
             AlertKind.RAILWAY -> "Jernbane"
-            AlertKind.FERRY -> namedOrFallback(parsed, "Ferje")
+            AlertKind.FERRY -> "Ferje"
             AlertKind.STOP -> "Stopp"
             AlertKind.YIELD -> "Vikeplikt"
             AlertKind.HAZARD -> namedOrFallback(parsed, SignLabel.displayName(payload, "Fareskilt"))
@@ -127,21 +127,20 @@ object AlertCopy {
         } else {
             ""
         }
-        if (distance.isNotEmpty() && extra.isNotEmpty()) {
-            return "$distance · $extra"
+        val combined = when {
+            distance.isNotEmpty() && extra.isNotEmpty() -> "$distance · $extra"
+            distance.isNotEmpty() -> distance
+            extra.isNotEmpty() -> extra
+            else -> ""
         }
-        if (distance.isNotEmpty()) {
-            return distance
-        }
-        if (extra.isNotEmpty()) {
-            return extra
-        }
-        return ""
+        // Never echo the title in the secondary line (Android Auto falls back badly if we do).
+        val title = titleFor(kind, payload)
+        return if (combined.equals(title, ignoreCase = true)) "" else combined
     }
 
-    /** Approach distance is noisy for most signs; only point cameras keep it. */
+    /** Approach distance for cameras and rail crossings; other kinds use name/price info instead. */
     fun showsApproachDistance(kind: AlertKind): Boolean {
-        return kind == AlertKind.SPEED_CAMERA
+        return kind == AlertKind.SPEED_CAMERA || kind == AlertKind.RAILWAY
     }
 
     fun sectionAverageBody(kmh: Int?): String {
@@ -154,6 +153,7 @@ object AlertCopy {
     fun extraBody(kind: AlertKind, payload: String): String {
         val parsed = ObjectPayload.parse(payload)
         return when (kind) {
+            AlertKind.FERRY -> ferryRouteName(parsed)
             AlertKind.TOLL -> {
                 val price = skyttelpassKroner(parsed.extra)
                 if (price.isNullOrBlank()) "" else "$price kr"
@@ -165,6 +165,14 @@ object AlertCopy {
             AlertKind.ROADWORK, AlertKind.ACCIDENT -> parsed.extra
             else -> ""
         }
+    }
+
+    private fun ferryRouteName(parsed: ObjectPayload): String {
+        val name = namedOrFallback(parsed, "")
+        if (name.isBlank() || isGeneric(name) || name.equals("Ferje", ignoreCase = true)) {
+            return ""
+        }
+        return name
     }
 
     fun skyttelpassKroner(rawPrice: String): String? {

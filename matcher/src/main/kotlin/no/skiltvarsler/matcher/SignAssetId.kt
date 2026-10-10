@@ -60,6 +60,10 @@ object SignAssetId {
         }
 
         if (trimmed.all { it.isDigit() }) {
+            if (trimmed == "126") {
+                // Prefer mandatory roundabout plate artwork over the rarer warning triangle.
+                return listOf("406", "406_0")
+            }
             return if (trimmed.length >= 3) {
                 listOf(trimmed, "${trimmed}_0")
             } else {
@@ -110,8 +114,11 @@ object SignAssetId {
         "100_1" to listOf("skarp-sving-til-hoeyre"),
         "100_2" to listOf("farlig-sving-til-venstre"),
         "102_1" to listOf("farlige-svinger-den-foerste-til-hoeyre"),
+        "126" to listOf("126_0", "406_0"),
+        "126_0" to listOf("406_0"),
         "153" to listOf("153_0", "trafikkulykke"),
         "153_0" to listOf("trafikkulykke"),
+        "406" to listOf("406_0"),
     )
 
     private fun speedLimitStem(payload: String, nvdbId: Long): String {

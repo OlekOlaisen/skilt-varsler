@@ -25,6 +25,9 @@ INACTIVE_STATUS = ("nedlagt", "utgått", "utgatt", "fjernet", "sanert")
 # NVDB has no skiltnummer 109 (fartshump). Underskilt 808.105 "Fartsdempere" is the
 # practical marker used with speed bumps, so map it to the app's hazard:109 toggle.
 FARTSHUMP_ALIASES = {"808.105"}
+# Påbudsskilt 406 is the roundabout plate drivers see; fare 126 is rarer. Both map to
+# app toggle hazard:406 / artwork 406_0.
+ROUNDABOUT_NUMBERS = {"406", "406.0", "126", "126.0"}
 _SKILTNUMMER_RE = re.compile(r"^(\d+)(?:[._](\d+[a-zA-Z]?))?")
 
 
@@ -50,6 +53,9 @@ def canonical_skilt_payload(number: str) -> str | None:
         return None
     if parsed in FARTSHUMP_ALIASES:
         return "109"
+    head = parsed.split(".", 1)[0]
+    if parsed in ROUNDABOUT_NUMBERS or head in {"406", "126"}:
+        return "406"
     return parsed
 
 
@@ -458,6 +464,9 @@ def classify_sign(number: str) -> str | None:
     if parsed in FARTSHUMP_ALIASES:
         return "HAZARD"
     head = parsed.split(".", 1)[0]
+    # 406 is outside the 100–156 fare range but is the primary roundabout plate.
+    if parsed in ROUNDABOUT_NUMBERS or head == "406":
+        return "HAZARD"
     if head.isdigit() and 100 <= int(head) <= 156:
         return "HAZARD"
     return None
